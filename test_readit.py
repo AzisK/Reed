@@ -6,7 +6,7 @@ import sys
 import types
 import argparse
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+
 
 import importlib.util
 import importlib.machinery
@@ -38,6 +38,17 @@ def _make_args(**overrides):
     return argparse.Namespace(**defaults)
 
 
+def _make_prompt_fn(lines: list[str]):
+    """Create a prompt_fn that yields lines then raises EOFError."""
+    it = iter(lines)
+    def prompt_fn() -> str:
+        try:
+            return next(it)
+        except StopIteration:
+            raise EOFError
+    return prompt_fn
+
+
 # ─── interactive_loop tests ───────────────────────────────────────────
 
 
@@ -45,167 +56,115 @@ class TestInteractiveLoop:
     def test_speaks_each_line_immediately(self):
         from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO("hello\nworld\nquit\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
-        assert spoken == ["hello", "world"]
-        assert result == 0
-
-    def test_pasted_multiline_batched_together(self):
-        from readit import interactive_loop
-
-        spoken = []
-
-        class FakeStdin:
-            """Simulates pasting multiple lines at once."""
-            def __init__(self, lines):
-                self._lines = list(lines)
-                self._pos = 0
-
-            def readline(self):
-                if self._pos >= len(self._lines):
-                    return ""
-                line = self._lines[self._pos]
-                self._pos += 1
-                return line
-
-            def isatty(self):
-                return False
-
-        stdin = FakeStdin(["line one\n", "line two\n", "line three\n"])
+        spoken: list[str] = []
         result = interactive_loop(
             speak_line=lambda t: spoken.append(t),
-            stdin=stdin,
-            has_more_input=lambda s: s._pos < len(s._lines),
+            prompt_fn=_make_prompt_fn(["hello", "world", "/quit"]),
         )
-        assert len(spoken) == 1
-        assert "line one" in spoken[0]
-        assert "line two" in spoken[0]
-        assert "line three" in spoken[0]
+        assert spoken == ["hello", "world"]
         assert result == 0
 
     def test_eof_exits_cleanly(self):
         from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO("hello\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
+        spoken: list[str] = []
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=_make_prompt_fn(["hello"]),
+        )
         assert spoken == ["hello"]
         assert result == 0
 
     def test_blank_lines_ignored(self):
         from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO("\n  \nhello\nquit\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
+        spoken: list[str] = []
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=_make_prompt_fn(["", "  ", "hello", "/quit"]),
+        )
         assert spoken == ["hello"]
         assert result == 0
 
     def test_quit_commands_case_insensitive(self):
         from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO("Hello\nEXIT\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
+        spoken: list[str] = []
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=_make_prompt_fn(["Hello", "/EXIT"]),
+        )
         assert spoken == ["Hello"]
         assert result == 0
 
     def test_exit_command(self):
         from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO("exit\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
+        spoken: list[str] = []
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=_make_prompt_fn(["/exit"]),
+        )
         assert spoken == []
         assert result == 0
 
     def test_colon_q_command(self):
         from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO(":q\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
+        spoken: list[str] = []
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=_make_prompt_fn([":q"]),
+        )
         assert spoken == []
         assert result == 0
 
-    def test_bracketed_paste_batched_as_single_speak(self):
-        from readit import interactive_loop, PASTE_START, PASTE_END
+    def test_multiline_paste_batched(self):
+        from readit import interactive_loop
 
-        spoken = []
-        stdin = io.StringIO(
-            f"{PASTE_START}line one\nline two\nline three{PASTE_END}\nquit\n"
+        spoken: list[str] = []
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=_make_prompt_fn(["line one\nline two\nline three", "/quit"]),
         )
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
         assert len(spoken) == 1
         assert "line one" in spoken[0]
         assert "line two" in spoken[0]
         assert "line three" in spoken[0]
         assert result == 0
 
-    def test_bracketed_paste_strips_escape_sequences(self):
-        from readit import interactive_loop, PASTE_START, PASTE_END
-
-        spoken = []
-        stdin = io.StringIO(f"{PASTE_START}hello world{PASTE_END}\nquit\n")
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=stdin)
-        assert spoken == ["hello world"]
-        assert PASTE_START not in spoken[0]
-        assert PASTE_END not in spoken[0]
-        assert result == 0
-
-    def test_bracketed_paste_mode_enabled_on_tty(self):
-        from readit import interactive_loop, BRACKETED_PASTE_ON, BRACKETED_PASTE_OFF
-
-        stderr = io.StringIO()
-
-        class FakeTtyStdin:
-            def isatty(self):
-                return True
-            def readline(self):
-                return ""
-            def fileno(self):
-                raise io.UnsupportedOperation
-
-        class FakeStdout:
-            def __init__(self):
-                self.written = []
-            def write(self, s):
-                self.written.append(s)
-            def flush(self):
-                pass
-
-        fake_stdout = FakeStdout()
-        interactive_loop(
-            speak_line=lambda t: None,
-            stdin=FakeTtyStdin(),
-            stderr=stderr,
-            tty_out=fake_stdout,
-        )
-        all_output = "".join(fake_stdout.written)
-        assert BRACKETED_PASTE_ON in all_output
-        assert BRACKETED_PASTE_OFF in all_output
-
     def test_ctrl_c_handled_gracefully(self):
         from readit import interactive_loop
 
-        spoken = []
+        spoken: list[str] = []
         call_count = 0
 
-        class FakeStdin:
-            def readline(self):
-                nonlocal call_count
-                call_count += 1
-                if call_count == 1:
-                    return "first\n"
-                raise KeyboardInterrupt
+        def raising_prompt() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return "first"
+            raise KeyboardInterrupt
 
-            def isatty(self):
-                return False
-
-        result = interactive_loop(speak_line=lambda t: spoken.append(t), stdin=FakeStdin())
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            prompt_fn=raising_prompt,
+        )
         assert spoken == ["first"]
         assert result == 0
+
+    def test_banner_printed(self):
+        from readit import interactive_loop, BANNER_LINES
+
+        stderr = io.StringIO()
+        interactive_loop(
+            speak_line=lambda t: None,
+            stderr=stderr,
+            prompt_fn=_make_prompt_fn(["/quit"]),
+        )
+        output = stderr.getvalue()
+        for line in BANNER_LINES:
+            assert line in output
 
 
 # ─── build_piper_cmd tests ────────────────────────────────────────────
@@ -282,16 +241,14 @@ class TestSpeakText:
         assert "Saved to" in stdout.getvalue()
 
     def test_piper_error_raises(self):
-        from readit import speak_text
+        from readit import speak_text, ReaditError
 
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="boom")
 
-        stderr = io.StringIO()
         args = _make_args()
-        with pytest.raises(SystemExit):
-            speak_text("hi", args, run=fake_run, stderr=stderr)
-        assert "boom" in stderr.getvalue()
+        with pytest.raises(ReaditError, match="boom"):
+            speak_text("hi", args, run=fake_run)
 
 
 # ─── main integration tests ──────────────────────────────────────────
@@ -307,14 +264,13 @@ class TestMainInteractiveFlag:
             loop_called.append(True)
             return 0
 
-        with pytest.raises(SystemExit) as exc_info:
-            main(
-                argv=["-i"],
-                interactive_loop_fn=fake_loop,
-                run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
-            )
+        code = main(
+            argv=["-i"],
+            interactive_loop_fn=fake_loop,
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+        )
         assert loop_called
-        assert exc_info.value.code == 0
+        assert code == 0
 
     def test_no_input_defaults_to_interactive(self):
         from readit import main
@@ -335,12 +291,69 @@ class TestMainInteractiveFlag:
             loop_called.append(True)
             return 0
 
-        with pytest.raises(SystemExit) as exc_info:
-            main(
-                argv=[],
-                interactive_loop_fn=fake_loop,
-                run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
-                stdin=FakeTtyStdin(),
-            )
+        code = main(
+            argv=[],
+            interactive_loop_fn=fake_loop,
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=FakeTtyStdin(),
+        )
         assert loop_called
-        assert exc_info.value.code == 0
+        assert code == 0
+
+
+# ─── _should_enter_interactive tests ─────────────────────────────────
+
+
+class TestShouldEnterInteractive:
+    def test_interactive_flag_true(self):
+        from readit import _should_enter_interactive
+
+        args = _make_args(interactive=True)
+        assert _should_enter_interactive(args, io.StringIO()) is True
+
+    def test_text_provided(self):
+        from readit import _should_enter_interactive
+
+        args = _make_args(text=["hello"])
+        assert _should_enter_interactive(args, io.StringIO()) is False
+
+    def test_file_provided(self):
+        from readit import _should_enter_interactive
+
+        args = _make_args(file="/tmp/test.txt")
+        assert _should_enter_interactive(args, io.StringIO()) is False
+
+    def test_clipboard(self):
+        from readit import _should_enter_interactive
+
+        args = _make_args(clipboard=True)
+        assert _should_enter_interactive(args, io.StringIO()) is False
+
+    def test_tty_stdin_no_args(self):
+        from readit import _should_enter_interactive
+
+        class FakeTty:
+            def isatty(self):
+                return True
+
+        args = _make_args()
+        assert _should_enter_interactive(args, FakeTty()) is True
+
+    def test_non_tty_stdin_no_args(self):
+        from readit import _should_enter_interactive
+
+        args = _make_args()
+        assert _should_enter_interactive(args, io.StringIO()) is False
+
+
+# ─── get_text with stdin injection tests ─────────────────────────────
+
+
+class TestGetTextStdin:
+    def test_piped_stdin_read(self):
+        from readit import get_text
+
+        stdin = io.StringIO("hello from pipe")
+        args = _make_args()
+        result = get_text(args, stdin=stdin)
+        assert result == "hello from pipe"

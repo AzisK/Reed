@@ -2,40 +2,46 @@
 """readit - A CLI that reads text aloud using piper-tts."""
 
 import argparse
-import io
-import select
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Callable, Optional, TextIO
+from typing import Callable, Optional, TextIO, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prompt_toolkit import PromptSession
 
 DEFAULT_MODEL = Path(__file__).parent / "en_US-kristin-medium.onnx"
 
-QUIT_WORDS = ("quit", "exit", ":q")
+QUIT_WORDS = ("/quit", "/exit", ":q")
 
-BRACKETED_PASTE_ON = "\033[?2004h"
-BRACKETED_PASTE_OFF = "\033[?2004l"
-PASTE_START = "\033[200~"
-PASTE_END = "\033[201~"
+BANNER_LINES = (
+    "Interactive mode. Type or paste text and press Enter.",
+    "Type '/quit', '/exit', or ':q' to stop. Ctrl-D for EOF.",
+)
 
 
-def get_text(args: argparse.Namespace) -> str:
+class ReaditError(Exception):
+    pass
+
+
+def get_text(args: argparse.Namespace, stdin: TextIO) -> str:
     if args.clipboard:
         result = subprocess.run(["pbpaste"], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise ReaditError("Failed to read clipboard")
         return result.stdout.strip()
 
     if args.file:
         return Path(args.file).read_text()
 
-    if not sys.stdin.isatty():
-        return sys.stdin.read().strip()
+    if not stdin.isatty():
+        return stdin.read().strip()
 
     if args.text:
         return " ".join(args.text)
 
-    print("No input provided. Use --help for usage.", file=sys.stderr)
-    sys.exit(1)
+    raise ReaditError("No input provided. Use --help for usage.")
 
 
 def build_piper_cmd(
@@ -62,95 +68,76 @@ def speak_text(
     args: argparse.Namespace,
     run: Callable = subprocess.run,
     stdout: TextIO = sys.stdout,
-    stderr: TextIO = sys.stderr,
 ) -> None:
     if args.output:
         piper_cmd = build_piper_cmd(args.model, args.speed, args.volume, args.silence, args.output)
         proc = run(piper_cmd, input=text, text=True, capture_output=True)
         if proc.returncode != 0:
-            print(f"piper error: {proc.stderr}", file=stderr)
-            sys.exit(1)
+            raise ReaditError(f"piper error: {proc.stderr}")
         print(f"Saved to {args.output}", file=stdout)
     else:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
             piper_cmd = build_piper_cmd(args.model, args.speed, args.volume, args.silence, Path(tmp.name))
             proc = run(piper_cmd, input=text, text=True, capture_output=True)
             if proc.returncode != 0:
-                print(f"piper error: {proc.stderr}", file=stderr)
-                sys.exit(1)
-            run(["afplay", tmp.name])
+                raise ReaditError(f"piper error: {proc.stderr}")
+            result = run(["afplay", tmp.name])
+            if result.returncode != 0:
+                raise ReaditError("afplay error")
 
 
-def _has_more_input(stdin: TextIO, timeout: float = 0.05) -> bool:
-    try:
-        ready, _, _ = select.select([stdin], [], [], timeout)
-        return bool(ready)
-    except (ValueError, io.UnsupportedOperation, OSError, TypeError):
-        return False
+def _make_prompt_session(
+    prompt: str,
+    quit_words: tuple[str, ...],
+) -> "PromptSession[str]":
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.history import InMemoryHistory
 
+    history = InMemoryHistory()
+    for cmd in quit_words:
+        history.append_string(cmd)
 
-def _strip_paste_markers(line: str) -> tuple[str, bool, bool]:
-    started = PASTE_START in line
-    ended = PASTE_END in line
-    line = line.replace(PASTE_START, "").replace(PASTE_END, "")
-    return line, started, ended
+    return PromptSession(
+        message=prompt,
+        history=history,
+        auto_suggest=AutoSuggestFromHistory(),
+    )
 
 
 def interactive_loop(
     speak_line: Callable[[str], None],
-    stdin: TextIO = sys.stdin,
-    stderr: TextIO = sys.stderr,
     prompt: str = "> ",
     quit_words: tuple[str, ...] = QUIT_WORDS,
-    has_more_input: Optional[Callable[[TextIO], bool]] = None,
-    tty_out: Optional[TextIO] = None,
+    stderr: TextIO = sys.stderr,
+    prompt_fn: Optional[Callable[[], str]] = None,
 ) -> int:
-    check_more = has_more_input or (lambda s: _has_more_input(s))
-    is_tty = hasattr(stdin, "isatty") and stdin.isatty()
-    if tty_out is None:
-        tty_out = sys.stdout
-    if is_tty:
-        tty_out.write(BRACKETED_PASTE_ON)
-        tty_out.flush()
-        print("Interactive mode. Type or paste text and press Enter.", file=stderr)
-        print("Type 'quit', 'exit', or ':q' to stop. Ctrl-D for EOF.", file=stderr)
+    quit_set = {w.lower() for w in quit_words}
+
+    for line in BANNER_LINES:
+        print(line, file=stderr)
+
+    if prompt_fn is None:
+        session = _make_prompt_session(prompt, quit_words)
+        prompt_fn = session.prompt
+
     try:
         while True:
-            if is_tty:
-                print(prompt, end="", flush=True, file=stderr)
-            line = stdin.readline()
-            if not line:
+            try:
+                text = prompt_fn()
+            except EOFError:
                 return 0
-            line, paste_started, paste_ended = _strip_paste_markers(line)
-            line = line.strip()
-            if not line and not paste_started:
+            text = text.strip()
+            if not text:
                 continue
-            if line.lower() in quit_words:
+            if text.lower() in quit_set:
                 return 0
-            lines = [line] if line else []
-            in_paste = paste_started and not paste_ended
-            while in_paste or check_more(stdin):
-                extra = stdin.readline()
-                if not extra:
-                    break
-                extra, _, ended = _strip_paste_markers(extra)
-                stripped = extra.strip()
-                if ended:
-                    in_paste = False
-                if stripped and stripped.lower() in quit_words:
-                    break
-                if stripped:
-                    lines.append(stripped)
-                if not in_paste and not check_more(stdin):
-                    break
-            if lines:
-                speak_line("\n".join(lines))
+            lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+            if not lines:
+                continue
+            speak_line("\n".join(lines))
     except KeyboardInterrupt:
         return 0
-    finally:
-        if is_tty:
-            tty_out.write(BRACKETED_PASTE_OFF)
-            tty_out.flush()
 
 
 def _should_enter_interactive(args: argparse.Namespace, stdin: TextIO) -> bool:
@@ -168,7 +155,7 @@ def main(
     run: Callable = subprocess.run,
     interactive_loop_fn: Optional[Callable] = None,
     stdin: Optional[TextIO] = None,
-) -> None:
+) -> int:
     if stdin is None:
         stdin = sys.stdin
 
@@ -191,23 +178,29 @@ def main(
     if _should_enter_interactive(args, stdin):
         if not args.model.exists():
             print(f"Model not found: {args.model}", file=sys.stderr)
-            sys.exit(1)
+            return 1
         loop_fn = interactive_loop_fn or interactive_loop
-        code = loop_fn(speak_line=lambda line: speak_text(line, args, run=run), stdin=stdin)
-        sys.exit(code)
+        code = loop_fn(speak_line=lambda line: speak_text(line, args, run=run))
+        return code
 
-    text = get_text(args)
+    try:
+        text = get_text(args, stdin)
 
-    if not text:
-        print("No text to read.", file=sys.stderr)
-        sys.exit(1)
+        if not text:
+            print("No text to read.", file=sys.stderr)
+            return 1
 
-    if not args.model.exists():
-        print(f"Model not found: {args.model}", file=sys.stderr)
-        sys.exit(1)
+        if not args.model.exists():
+            print(f"Model not found: {args.model}", file=sys.stderr)
+            return 1
 
-    speak_text(text, args, run=run)
+        speak_text(text, args, run=run)
+    except ReaditError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
