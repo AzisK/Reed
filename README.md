@@ -12,7 +12,7 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 
 ```bash
 uv venv
-uv pip install piper-tts
+uv pip install -e .
 ```
 
 Download a voice model (e.g., [kristin](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/kristin/medium)) and place the `.onnx` and `.onnx.json` files in the project root.
@@ -21,31 +21,31 @@ Download a voice model (e.g., [kristin](https://huggingface.co/rhasspy/piper-voi
 
 ```bash
 # Read text directly
-uv run python readit "Hello, I will read this for you"
+uv run readit "Hello, I will read this for you"
 
 # Pipe from stdin
-echo "Some long text" | uv run python readit
+echo "Some long text" | uv run readit
 
 # Read from a file
-uv run python readit -f article.txt
+uv run readit -f article.txt
 
 # Read from clipboard
-uv run python readit -c
+uv run readit -c
 
 # Interactive mode (launches automatically when no input is provided)
-uv run python readit
+uv run readit
 
 # Interactive mode (explicit)
-uv run python readit -i
+uv run readit -i
 
 # Save to WAV file instead of playing
-uv run python readit -o output.wav "Save this"
+uv run readit -o output.wav "Save this"
 
 # Play a saved WAV file
 afplay output.wav
 
 # Adjust speed (lower = slower) and volume
-uv run python readit -s 0.8 -v 1.5 "Slower and louder"
+uv run readit -s 0.8 -v 1.5 "Slower and louder"
 ```
 
 ### Interactive mode
@@ -72,5 +72,5 @@ When launched with no arguments (or with `-i`), readit enters interactive mode. 
 ### Add to PATH
 
 ```bash
-ln -s "$(pwd)/readit" ~/.local/bin/readit
+ln -s "$(pwd)/.venv/bin/readit" ~/.local/bin/readit
 ```

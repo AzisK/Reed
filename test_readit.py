@@ -8,18 +8,9 @@ import argparse
 from pathlib import Path
 
 
-import importlib.util
-import importlib.machinery
 import pytest
 
-_readit_path = str(Path(__file__).parent / "readit")
-_loader = importlib.machinery.SourceFileLoader("readit", _readit_path)
-_spec = importlib.util.spec_from_loader("readit", _loader, origin=_readit_path)
-assert _spec
-_readit = importlib.util.module_from_spec(_spec)
-_readit.__file__ = _readit_path
-_loader.exec_module(_readit)
-sys.modules["readit"] = _readit
+import readit as _readit
 
 
 def _make_args(**overrides):

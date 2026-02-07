@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Packaging
+- **Added `pyproject.toml`**: `readit` is now installable as a package via `uv pip install -e .` with a `readit` console script entry point.
+- **Renamed `readit` → `readit.py`**: Enables standard Python imports; no more `SourceFileLoader` hack in tests.
+- **Dependencies declared**: `piper-tts` and `prompt-toolkit` listed in `pyproject.toml`; `mypy` and `pytest` as optional dev dependencies (`uv pip install -e ".[dev]"`).
+
 ### Interactive mode
 - **Replaced quit words with slash commands**: `quit`/`exit` → `/quit`/`/exit` (`:q` retained). Plain words can now be spoken without accidentally exiting.
 - **Integrated `prompt_toolkit`**: Interactive mode now uses `PromptSession` with fish-style auto-suggest for commands as you type. Handles bracketed paste natively.

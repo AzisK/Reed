@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Callable, Optional, TextIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional, TextIO
 
 if TYPE_CHECKING:
     from prompt_toolkit import PromptSession
@@ -52,11 +52,17 @@ def build_piper_cmd(
     output: Optional[Path] = None,
 ) -> list[str]:
     cmd = [
-        sys.executable, "-m", "piper",
-        "--model", str(model),
-        "--length-scale", str(speed),
-        "--volume", str(volume),
-        "--sentence-silence", str(silence),
+        sys.executable,
+        "-m",
+        "piper",
+        "--model",
+        str(model),
+        "--length-scale",
+        str(speed),
+        "--volume",
+        str(volume),
+        "--sentence-silence",
+        str(silence),
     ]
     if output:
         cmd += ["--output-file", str(output)]
@@ -70,14 +76,18 @@ def speak_text(
     stdout: TextIO = sys.stdout,
 ) -> None:
     if args.output:
-        piper_cmd = build_piper_cmd(args.model, args.speed, args.volume, args.silence, args.output)
+        piper_cmd = build_piper_cmd(
+            args.model, args.speed, args.volume, args.silence, args.output
+        )
         proc = run(piper_cmd, input=text, text=True, capture_output=True)
         if proc.returncode != 0:
             raise ReaditError(f"piper error: {proc.stderr}")
         print(f"Saved to {args.output}", file=stdout)
     else:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
-            piper_cmd = build_piper_cmd(args.model, args.speed, args.volume, args.silence, Path(tmp.name))
+            piper_cmd = build_piper_cmd(
+                args.model, args.speed, args.volume, args.silence, Path(tmp.name)
+            )
             proc = run(piper_cmd, input=text, text=True, capture_output=True)
             if proc.returncode != 0:
                 raise ReaditError(f"piper error: {proc.stderr}")
@@ -165,13 +175,41 @@ def main(
     )
     parser.add_argument("text", nargs="*", help="Text to read aloud")
     parser.add_argument("-f", "--file", help="Read text from a file")
-    parser.add_argument("-c", "--clipboard", action="store_true", help="Read text from clipboard")
-    parser.add_argument("-m", "--model", type=Path, default=DEFAULT_MODEL, help="Path to voice model")
-    parser.add_argument("-s", "--speed", type=float, default=1.0, help="Speech speed (default: 1.0, lower=slower)")
-    parser.add_argument("-v", "--volume", type=float, default=1.0, help="Volume multiplier (default: 1.0)")
-    parser.add_argument("-o", "--output", type=Path, help="Save to WAV file instead of playing")
-    parser.add_argument("--silence", type=float, default=0.3, help="Seconds of silence between sentences")
-    parser.add_argument("-i", "--interactive", action="store_true", help="Interactive mode: type/paste text to read")
+    parser.add_argument(
+        "-c", "--clipboard", action="store_true", help="Read text from clipboard"
+    )
+    parser.add_argument(
+        "-m", "--model", type=Path, default=DEFAULT_MODEL, help="Path to voice model"
+    )
+    parser.add_argument(
+        "-s",
+        "--speed",
+        type=float,
+        default=1.0,
+        help="Speech speed (default: 1.0, lower=slower)",
+    )
+    parser.add_argument(
+        "-v",
+        "--volume",
+        type=float,
+        default=1.0,
+        help="Volume multiplier (default: 1.0)",
+    )
+    parser.add_argument(
+        "-o", "--output", type=Path, help="Save to WAV file instead of playing"
+    )
+    parser.add_argument(
+        "--silence",
+        type=float,
+        default=0.3,
+        help="Seconds of silence between sentences",
+    )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="Interactive mode: type/paste text to read",
+    )
 
     args = parser.parse_args(argv)
 
