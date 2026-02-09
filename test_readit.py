@@ -226,7 +226,7 @@ class TestBuildPiperCmd:
         )
         assert cmd[1:3] == ["-m", "piper"]
         assert "--model" in cmd
-        assert "/models/test.onnx" in cmd
+        assert str(Path("/models/test.onnx")) in cmd
         assert "--length-scale" in cmd
         assert "--volume" in cmd
         assert "--sentence-silence" in cmd
@@ -243,7 +243,7 @@ class TestBuildPiperCmd:
         )
         assert "--output-file" in cmd
         idx = cmd.index("--output-file")
-        assert cmd[idx + 1] == "/out.wav"
+        assert cmd[idx + 1] == str(Path("/out.wav"))
 
 
 # ─── speak_text tests ────────────────────────────────────────────────
@@ -325,7 +325,7 @@ class TestMainInteractiveFlag:
             return 0
 
         code = main(
-            argv=["-i"],
+            argv=["-i", "-m", __file__],
             interactive_loop_fn=fake_loop,
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
         )
@@ -352,7 +352,7 @@ class TestMainInteractiveFlag:
             return 0
 
         code = main(
-            argv=[],
+            argv=["-m", __file__],
             interactive_loop_fn=fake_loop,
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=FakeTtyStdin(),
@@ -470,7 +470,7 @@ class TestMainErrors:
             return types.SimpleNamespace(returncode=1, stderr="piper exploded")
 
         code, output = self._capture_main(
-            argv=[],
+            argv=["-m", __file__],
             run=failing_run,
             stdin=io.StringIO("hello"),
         )
