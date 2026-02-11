@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for readit interactive mode and core functions (TDD)."""
+"""Tests for reed interactive mode and core functions (TDD)."""
 
 import io
 import types
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-import readit as _readit
+import reed as _reed
 
 
 def _make_args(**overrides):
@@ -46,7 +46,7 @@ def _make_prompt_fn(lines: list[str]):
 
 class TestInteractiveLoop:
     def test_speaks_each_line_immediately(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         result = interactive_loop(
@@ -57,7 +57,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_eof_exits_cleanly(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         result = interactive_loop(
@@ -68,7 +68,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_blank_lines_ignored(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         result = interactive_loop(
@@ -79,7 +79,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_quit_commands_case_insensitive(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         result = interactive_loop(
@@ -90,7 +90,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_exit_command(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         result = interactive_loop(
@@ -101,7 +101,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_help_command(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
 
@@ -116,7 +116,7 @@ class TestInteractiveLoop:
         assert spoken == []
 
     def test_clear_command(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         cleared: list[bool] = []
@@ -135,7 +135,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_replay_command(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
 
@@ -151,7 +151,7 @@ class TestInteractiveLoop:
         assert spoken[0] == spoken[1] == "first line"
 
     def test_replay_with_no_prior_text(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         printed: list[object] = []
@@ -165,7 +165,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_multiline_paste_batched(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         interactive_loop(
@@ -178,7 +178,7 @@ class TestInteractiveLoop:
         assert "line three" in spoken[0]
 
     def test_ctrl_c_handled_gracefully(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         spoken: list[str] = []
         call_count = 0
@@ -198,7 +198,7 @@ class TestInteractiveLoop:
         assert result == 0
 
     def test_banner_printed(self):
-        from readit import interactive_loop
+        from reed import interactive_loop
 
         printed: list[object] = []
         result = interactive_loop(
@@ -207,7 +207,7 @@ class TestInteractiveLoop:
             prompt_fn=_make_prompt_fn(["/quit"]),
         )
         assert result == 0
-        assert any("readit" in str(item) for item in printed)
+        assert any("reed" in str(item) for item in printed)
 
 
 # ─── build_piper_cmd tests ────────────────────────────────────────────
@@ -215,7 +215,7 @@ class TestInteractiveLoop:
 
 class TestBuildPiperCmd:
     def test_basic_command(self):
-        from readit import build_piper_cmd
+        from reed import build_piper_cmd
 
         cmd = build_piper_cmd(
             model=Path("/models/test.onnx"),
@@ -232,7 +232,7 @@ class TestBuildPiperCmd:
         assert "--sentence-silence" in cmd
 
     def test_with_output_file(self):
-        from readit import build_piper_cmd
+        from reed import build_piper_cmd
 
         cmd = build_piper_cmd(
             model=Path("/models/test.onnx"),
@@ -251,7 +251,7 @@ class TestBuildPiperCmd:
 
 class TestSpeakText:
     def test_play_path_calls_piper_then_afplay(self):
-        from readit import speak_text
+        from reed import speak_text
 
         calls = []
 
@@ -268,7 +268,7 @@ class TestSpeakText:
         assert calls[1][0][0] == "afplay"
 
     def test_output_path_no_afplay(self):
-        from readit import speak_text
+        from reed import speak_text
 
         calls = []
 
@@ -285,17 +285,17 @@ class TestSpeakText:
         assert len(calls) == 1
 
     def test_piper_error_raises(self):
-        from readit import speak_text, ReaditError
+        from reed import speak_text, ReedError
 
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="boom")
 
         args = _make_args()
-        with pytest.raises(ReaditError, match="boom"):
+        with pytest.raises(ReedError, match="boom"):
             speak_text("hi", args, run=fake_run)
 
     def test_afplay_error_raises(self):
-        from readit import speak_text, ReaditError
+        from reed import speak_text, ReedError
 
         call_count = 0
 
@@ -307,7 +307,7 @@ class TestSpeakText:
             return types.SimpleNamespace(returncode=1, stderr="")
 
         args = _make_args()
-        with pytest.raises(ReaditError, match="afplay error"):
+        with pytest.raises(ReedError, match="afplay error"):
             speak_text("hi", args, run=fake_run)
 
 
@@ -316,7 +316,7 @@ class TestSpeakText:
 
 class TestMainInteractiveFlag:
     def test_interactive_flag_routes_to_loop(self):
-        from readit import main
+        from reed import main
 
         loop_called = []
 
@@ -333,7 +333,7 @@ class TestMainInteractiveFlag:
         assert code == 0
 
     def test_no_input_defaults_to_interactive(self):
-        from readit import main
+        from reed import main
 
         loop_called = []
 
@@ -366,31 +366,31 @@ class TestMainInteractiveFlag:
 
 class TestShouldEnterInteractive:
     def test_interactive_flag_true(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         args = _make_args(interactive=True)
         assert _should_enter_interactive(args, io.StringIO()) is True
 
     def test_text_provided(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         args = _make_args(text=["hello"])
         assert _should_enter_interactive(args, io.StringIO()) is False
 
     def test_file_provided(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         args = _make_args(file="/tmp/test.txt")
         assert _should_enter_interactive(args, io.StringIO()) is False
 
     def test_clipboard(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         args = _make_args(clipboard=True)
         assert _should_enter_interactive(args, io.StringIO()) is False
 
     def test_tty_stdin_no_args(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         class FakeTty:
             def isatty(self):
@@ -400,13 +400,13 @@ class TestShouldEnterInteractive:
         assert _should_enter_interactive(args, FakeTty()) is True
 
     def test_non_tty_stdin_no_args(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         args = _make_args()
         assert _should_enter_interactive(args, io.StringIO()) is False
 
     def test_none_stdin(self):
-        from readit import _should_enter_interactive
+        from reed import _should_enter_interactive
 
         args = _make_args()
         assert _should_enter_interactive(args, None) is False
@@ -417,7 +417,7 @@ class TestShouldEnterInteractive:
 
 class TestGetTextStdin:
     def test_piped_stdin_read(self):
-        from readit import get_text
+        from reed import get_text
 
         stdin = io.StringIO("hello from pipe")
         args = _make_args()
@@ -425,7 +425,7 @@ class TestGetTextStdin:
         assert result == "hello from pipe"
 
     def test_text_args_joined(self):
-        from readit import get_text
+        from reed import get_text
 
         class FakeTty:
             def isatty(self):
@@ -444,7 +444,7 @@ class TestMainErrors:
         from rich.console import Console as RichConsole
 
         cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
-        code = _readit.main(print_fn=cap_console.print, **kwargs)
+        code = _reed.main(print_fn=cap_console.print, **kwargs)
         output = cap_console.file.getvalue()
         return code, output
 
@@ -465,7 +465,7 @@ class TestMainErrors:
         )
         assert code == 1
 
-    def test_readit_error_returns_1(self):
+    def test_reed_error_returns_1(self):
         def failing_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="piper exploded")
 

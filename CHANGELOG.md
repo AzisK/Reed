@@ -25,15 +25,15 @@
 - **`interactive_loop` simplified**: Accepts a `prompt_fn` for dependency injection instead of fake stdin objects.
 
 ### Error handling
-- **Added `ReaditError` exception**: Helpers (`get_text`, `speak_text`) now raise `ReaditError` instead of calling `sys.exit(1)` directly, making them reusable and testable.
-- **`pbpaste` and `afplay` return codes checked**: Previously ignored; now raises `ReaditError` on failure.
+- **Added `ReedError` exception**: Helpers (`get_text`, `speak_text`) now raise `ReedError` instead of calling `sys.exit(1)` directly, making them reusable and testable.
+- **`pbpaste` and `afplay` return codes checked**: Previously ignored; now raises `ReedError` on failure.
 
 ### Packaging
-- **Added `pyproject.toml`**: `readit` is now installable as a package via `uv pip install -e .` with a `readit` console script entry point.
-- **Renamed `readit` → `readit.py`**: Enables standard Python imports; no more `SourceFileLoader` hack in tests.
+- **Added `pyproject.toml`**: `reed` is now installable as a package via `uv pip install -e .` with a `reed` console script entry point.
+- **Renamed `reed` → `reed.py`**: Enables standard Python imports; no more `SourceFileLoader` hack in tests.
 - **Dependencies declared**: `piper-tts`, `prompt-toolkit`, and `rich` listed in `pyproject.toml`; `mypy` and `pytest` as optional dev dependencies.
 
 ### Tests
-- **32 tests** (up from 25): added coverage for `/replay` (with and without prior text), `/clear` (verifies `clear_fn` called), afplay failure, missing model error, empty text error, `ReaditError` propagation through `main`, `_should_enter_interactive` with `None` stdin, and `get_text` with text args.
+- **32 tests** (up from 25): added coverage for `/replay` (with and without prior text), `/clear` (verifies `clear_fn` called), afplay failure, missing model error, empty text error, `ReedError` propagation through `main`, `_should_enter_interactive` with `None` stdin, and `get_text` with text args.
 - Banner test now captures `print_fn` output and verifies the banner was actually printed.
 - `TestMainErrors` uses Rich `Console` capture for end-to-end error message verification.
