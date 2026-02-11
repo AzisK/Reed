@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""readit - A CLI that reads text aloud using piper-tts."""
+"""reed - A CLI that reads text aloud using piper-tts."""
 
 import argparse
 import subprocess
@@ -20,7 +20,7 @@ from rich.text import Text
 console = Console()
 
 
-class ReaditError(Exception):
+class ReedError(Exception):
     pass
 
 
@@ -28,7 +28,7 @@ DEFAULT_MODEL = Path(__file__).parent / "en_US-kristin-medium.onnx"
 
 QUIT_WORDS = ("/quit", "/exit")
 
-BANNER_MARKUP = """🔊 [bold]readit[/bold] - Interactive Mode
+BANNER_MARKUP = """🔊 [bold]reed[/bold] - Interactive Mode
 ──────────────────────────────────────────────────────────────
 [dim]Type or paste text and press Enter to hear it.[/dim]
 [dim]Type [bold]/quit[/bold] or [bold]/exit[/bold] to stop. Ctrl-D for EOF.[/dim]
@@ -47,7 +47,7 @@ def get_text(args: argparse.Namespace, stdin: TextIO) -> str:
     if args.clipboard:
         result = subprocess.run(["pbpaste"], capture_output=True, text=True)
         if result.returncode != 0:
-            raise ReaditError("Failed to read clipboard")
+            raise ReedError("Failed to read clipboard")
         return result.stdout.strip()
 
     if args.file:
@@ -59,7 +59,7 @@ def get_text(args: argparse.Namespace, stdin: TextIO) -> str:
     if args.text:
         return " ".join(args.text)
 
-    raise ReaditError("No input provided. Use --help for usage.")
+    raise ReedError("No input provided. Use --help for usage.")
 
 
 def build_piper_cmd(
@@ -158,7 +158,7 @@ def speak_text(
         proc = run(piper_cmd, input=text, text=True, capture_output=True)
         elapsed = time.time() - start
         if proc.returncode != 0:
-            raise ReaditError(f"piper error: {proc.stderr}")
+            raise ReedError(f"piper error: {proc.stderr}")
         print_fn(f"\n[bold green]✓ Done in {elapsed:.1f}s[/bold green]")
         print_saved_message(args.output, print_fn)
     else:
@@ -170,14 +170,14 @@ def speak_text(
             )
             proc = run(piper_cmd, input=text, text=True, capture_output=True)
             if proc.returncode != 0:
-                raise ReaditError(f"piper error: {proc.stderr}")
+                raise ReedError(f"piper error: {proc.stderr}")
             print_fn(
                 f"\n[bold green]✓ Generated in {time.time() - start:.1f}s[/bold green]"
             )
             print_playback_progress(print_fn)
             result = run(["afplay", tmp.name])
             if result.returncode != 0:
-                raise ReaditError("afplay error")
+                raise ReedError("afplay error")
             print_fn("[bold green]✓ Done[/bold green]")
 
 
@@ -291,7 +291,7 @@ def main(
         print_fn = console.print
 
     parser = argparse.ArgumentParser(
-        prog="readit",
+        prog="reed",
         description="Read text aloud using piper-tts",
     )
     parser.add_argument("text", nargs="*", help="Text to read aloud")
@@ -358,7 +358,7 @@ def main(
             return 1
 
         speak_text(text, args, run=run, print_fn=print_fn)
-    except ReaditError as e:
+    except ReedError as e:
         print_error(str(e), print_fn)
         return 1
 

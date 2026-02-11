@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+readit.py
+readit.egg-info/PKG-INFO
+readit.egg-info/SOURCES.txt
+readit.egg-info/dependency_links.txt
+readit.egg-info/entry_points.txt
+readit.egg-info/requires.txt
+readit.egg-info/top_level.txt

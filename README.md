@@ -1,4 +1,4 @@
-# readit
+# reed
 
 A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper). Uses the `en_US-kristin-medium` voice by default.
 
@@ -40,52 +40,52 @@ To download a model:
 To use a different voice, specify the model path:
 
 ```bash
-uv run readit -m en_US-amy-medium.onnx "Hello world"
+uv run reed -m en_US-amy-medium.onnx "Hello world"
 ```
 
 ## Usage
 
 ```bash
 # Read text directly
-uv run readit "Hello, I will read this for you"
+uv run reed "Hello, I will read this for you"
 
 # Read from a file
-uv run readit -f article.txt
+uv run reed -f article.txt
 
 # Read from clipboard
-uv run readit -c
+uv run reed -c
 
 # Read from clipboard (alternative)
-pbpaste | uv run readit
+pbpaste | uv run reed
 
 # Interactive mode (launches automatically when no input is provided)
-uv run readit
+uv run reed
 
 # Interactive mode (explicit)
-uv run readit -i
+uv run reed -i
 
 # Read from a file (alternative)
-cat article.txt | uv run readit
+cat article.txt | uv run reed
 
 # Save to WAV file instead of playing
-uv run readit -o output.wav "Save this"
+uv run reed -o output.wav "Save this"
 
 # Play a saved WAV file
 afplay output.wav
 
 # Read text piped from other commands
-ls -1 | uv run readit
+ls -1 | uv run reed
 
 # Read the output of a command
-df -h | uv run readit
+df -h | uv run reed
 
 # Adjust speed (lower = slower) and volume
-uv run readit -s 0.8 -v 1.5 "Slower and louder"
+uv run reed -s 0.8 -v 1.5 "Slower and louder"
 ```
 
 ### Interactive mode
 
-When launched with no arguments (or with `-i`), readit enters interactive mode. Type or paste text and press Enter to hear it read aloud.
+When launched with no arguments (or with `-i`), reed enters interactive mode. Type or paste text and press Enter to hear it read aloud.
 
 #### Visual Enhancements
 
@@ -121,25 +121,25 @@ When launched with no arguments (or with `-i`), readit enters interactive mode. 
 
 ```bash
 # Read clipboard content
-pbpaste | readit
+pbpaste | reed
 
 # Read file content via cat
-cat article.txt | readit
+cat article.txt | reed
 
 # Read command output
-ls -1 | readit
-df -h | readit
+ls -1 | reed
+df -h | reed
 
 # Chain with other commands
-echo "Done!" | readit && open .
-find . -name "*.txt" | readit
+echo "Done!" | reed && open .
+find . -name "*.txt" | reed
 
 # Save piped text to WAV and play it
-echo "Notification" | readit -o /tmp/notify.wav && afplay /tmp/notify.wav
+echo "Notification" | reed -o /tmp/notify.wav && afplay /tmp/notify.wav
 ```
 
 ### Add to PATH
 
 ```bash
-ln -s "$(pwd)/.venv/bin/readit" ~/.local/bin/readit
+ln -s "$(pwd)/.venv/bin/reed" ~/.local/bin/reed
 ```

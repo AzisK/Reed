@@ -1,0 +1,2 @@
+[console_scripts]
+readit = readit:main

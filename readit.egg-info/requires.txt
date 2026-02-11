@@ -1,0 +1,8 @@
+pathvalidate
+piper-tts
+prompt-toolkit
+rich
+
+[dev]
+mypy
+pytest

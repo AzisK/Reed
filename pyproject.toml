@@ -1,5 +1,5 @@
 [project]
-name = "readit"
+name = "reed"
 version = "0.1.0"
 description = "A CLI that reads text aloud using piper-tts"
 requires-python = ">=3.14"
@@ -24,10 +24,10 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["readit"]
+py-modules = ["reed"]
 
 [project.scripts]
-readit = "readit:main"
+reed = "reed:main"
 
 [tool.pytest.ini_options]
 testpaths = ["."]
