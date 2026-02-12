@@ -268,8 +268,6 @@ def interactive_loop(
 def _should_enter_interactive(
     args: argparse.Namespace, stdin: Optional[TextIO]
 ) -> bool:
-    if args.interactive:
-        return True
     if args.text or args.file or args.clipboard:
         return False
     if stdin is not None and hasattr(stdin, "isatty") and stdin.isatty():
@@ -325,13 +323,6 @@ def main(
         default=0.3,
         help="Seconds of silence between sentences",
     )
-    parser.add_argument(
-        "-i",
-        "--interactive",
-        action="store_true",
-        help="Interactive mode: type/paste text to read",
-    )
-
     args = parser.parse_args(argv)
 
     if _should_enter_interactive(args, stdin):

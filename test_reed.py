@@ -22,7 +22,6 @@ def _make_args(**overrides):
         volume=1.0,
         output=None,
         silence=0.3,
-        interactive=False,
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -315,23 +314,6 @@ class TestSpeakText:
 
 
 class TestMainInteractiveFlag:
-    def test_interactive_flag_routes_to_loop(self):
-        from reed import main
-
-        loop_called = []
-
-        def fake_loop(**kwargs):
-            loop_called.append(True)
-            return 0
-
-        code = main(
-            argv=["-i", "-m", __file__],
-            interactive_loop_fn=fake_loop,
-            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
-        )
-        assert loop_called
-        assert code == 0
-
     def test_no_input_defaults_to_interactive(self):
         from reed import main
 
@@ -365,12 +347,6 @@ class TestMainInteractiveFlag:
 
 
 class TestShouldEnterInteractive:
-    def test_interactive_flag_true(self):
-        from reed import _should_enter_interactive
-
-        args = _make_args(interactive=True)
-        assert _should_enter_interactive(args, io.StringIO()) is True
-
     def test_text_provided(self):
         from reed import _should_enter_interactive
 
