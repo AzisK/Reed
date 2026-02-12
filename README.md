@@ -61,9 +61,6 @@ pbpaste | uv run reed
 # Interactive mode (launches automatically when no input is provided)
 uv run reed
 
-# Interactive mode (explicit)
-uv run reed -i
-
 # Read from a file (alternative)
 cat article.txt | uv run reed
 
@@ -85,7 +82,7 @@ uv run reed -s 0.8 -v 1.5 "Slower and louder"
 
 ### Interactive mode
 
-When launched with no arguments (or with `-i`), reed enters interactive mode. Type or paste text and press Enter to hear it read aloud.
+When launched with no arguments, reed enters interactive mode. Type or paste text and press Enter to hear it read aloud.
 
 #### Visual Enhancements
 
@@ -109,7 +106,6 @@ When launched with no arguments (or with `-i`), reed enters interactive mode. Ty
 | `-m`, `--model` | Path to voice model | `en_US-kristin-medium.onnx` |
 | `-s`, `--speed` | Speech speed (lower = slower) | `1.0` |
 | `-v`, `--volume` | Volume multiplier | `1.0` |
-| `-i`, `--interactive` | Interactive mode: type/paste text to read | — |
 | `-o`, `--output` | Save to WAV file instead of playing | — |
 | `--silence` | Seconds of silence between sentences | `0.3` |
 
