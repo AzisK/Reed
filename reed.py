@@ -320,7 +320,7 @@ def main(
     parser.add_argument(
         "--silence",
         type=float,
-        default=0.3,
+        default=0.6,
         help="Seconds of silence between sentences",
     )
     args = parser.parse_args(argv)
