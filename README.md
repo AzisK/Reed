@@ -2,6 +2,16 @@
 
 A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper). Uses the `en_US-kristin-medium` voice by default.
 
+## Features
+
+- **Multiple input sources** — text argument, file (`-f`), clipboard (`-c`), or stdin
+- **Pipe-friendly** — reads from stdin, works anywhere in a shell pipeline
+- **Interactive mode** — conversational TTS with `/replay`, `/help`, `/clear`, tab completion, and history
+- **Adjustable speech** — control speed (`-s`), volume (`-v`), and sentence silence (`--silence`)
+- **Swappable voices** — use any piper-tts `.onnx` model with `-m`
+- **WAV export** — save output to file with `-o` instead of playing
+- **Rich terminal UI** — styled output with progress indicators and error panels
+
 ## Requirements
 
 - Python 3.14+
@@ -40,44 +50,76 @@ To download a model:
 To use a different voice, specify the model path:
 
 ```bash
-uv run reed -m en_US-amy-medium.onnx "Hello world"
+reed -m en_US-amy-medium.onnx "Hello world"
 ```
 
 ## Usage
 
 ```bash
 # Read text directly
-uv run reed "Hello, I will read this for you"
+reed "Hello, I will read this for you"
 
 # Read from a file
-uv run reed -f article.txt
+reed -f article.txt
 
 # Read from clipboard
-uv run reed -c
+reed -c
 
-# Read from clipboard (alternative)
-pbpaste | uv run reed
+# Add longer silence between sentences (in seconds) while the default is 0.6 seconds
+reed --silence 1 "First sentence. Second sentence. Bye bye."
 
 # Interactive mode (launches automatically when no input is provided)
-uv run reed
+reed
 
-# Read from a file (alternative)
-cat article.txt | uv run reed
+# Interactive mode with silence longer between sentences
+reed --silence 1
 
 # Save to WAV file instead of playing
-uv run reed -o output.wav "Save this"
+reed -o output.wav "Save this"
 
 # Play a saved WAV file
 afplay output.wav
 
-# Read text piped from other commands
-ls -1 | uv run reed
-
-# Read the output of a command
-df -h | uv run reed
-
 # Adjust speed (lower = slower) and volume
-uv run reed -s 0.8 -v 1.5 "Slower and louder"
+reed -s 0.8 -v 1.5 "Slower and louder"
+
+# Combine speed, volume, and silence
+reed -s 0.7 -v 1.3 --silence 0.3 -f long_article.txt
+```
+
+## Piped Usage
+
+```bash
+# Read from a file (alternative)
+cat article.txt | reed
+
+# Read from echo
+echo 'Done, done' | reed
+
+# Read from clipboard (alternative)
+pbpaste | reed
+
+# Read files in a directory
+ls -1 | reed
+
+# Read .txt files in a directory recursively
+find . -name "*.txt" | reed
+
+# Read the information about the disk usage
+df -h | reed
+
+# Save piped text to WAV and play it
+echo "Notification" | reed -o /tmp/notify.wav && afplay /tmp/notify.wav
+
+# Read git log
+git log --oneline -5 | reed
+
+# Read the content of a webpage, requires soffice (LibreOffice CLI)
+# It can be found in the LibreOffice installation directory and you can add an alias to it
+# alias soffice='/Applications/LibreOffice.app/Contents/MacOS/soffice' inside `~/.zprofile` (~/.zshrc, ~/.bashrc etc.)
+curl -s https://example.com -o /tmp/page.html && \
+  soffice --headless --convert-to txt /tmp/page.html --outdir /tmp && \
+  reed -f /tmp/page.txt
 ```
 
 ### Interactive mode
@@ -107,32 +149,7 @@ When launched with no arguments, reed enters interactive mode. Type or paste tex
 | `-s`, `--speed` | Speech speed (lower = slower) | `1.0` |
 | `-v`, `--volume` | Volume multiplier | `1.0` |
 | `-o`, `--output` | Save to WAV file instead of playing | — |
-| `--silence` | Seconds of silence between sentences | `0.3` |
-
-### Other Use Cases
-
-**Piped input detection:** When stdin is not a TTY (e.g., when used in a pipeline), the program reads from stdin instead of prompting interactively.
-
-**Common patterns:**
-
-```bash
-# Read clipboard content
-pbpaste | reed
-
-# Read file content via cat
-cat article.txt | reed
-
-# Read command output
-ls -1 | reed
-df -h | reed
-
-# Chain with other commands
-echo "Done!" | reed && open .
-find . -name "*.txt" | reed
-
-# Save piped text to WAV and play it
-echo "Notification" | reed -o /tmp/notify.wav && afplay /tmp/notify.wav
-```
+| `--silence` | Seconds of silence between sentences | `0.6` |
 
 ### Add to PATH
 

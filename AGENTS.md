@@ -6,6 +6,7 @@ This is `reed`, a Python CLI wrapper around piper-tts for text-to-speech on macO
 
 ## Stack
 
+- uv — package manager and virtual environment tool
 - Python 3.14+
 - piper-tts (dependency in pyproject.toml, installed via `uv pip install -e .`)
 - macOS `afplay` for audio playback, `pbpaste` for clipboard access
