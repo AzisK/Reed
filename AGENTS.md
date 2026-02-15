@@ -49,3 +49,7 @@ This is `reed`, a Python CLI wrapper around piper-tts for text-to-speech on macO
  - Commands available in interactive mode: `/quit`, `/exit`, `/help`, `/clear`, `/replay`
  - Tab autocomplete available for commands
  - Include `print_fn` parameter for testability with dependency injection
+
+## Git
+
+- Do NOT add `Co-authored-by` or `Amp-Thread-ID` trailers to commits
