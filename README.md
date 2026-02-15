@@ -126,12 +126,6 @@ curl -s https://example.com -o /tmp/page.html && \
 
 When launched with no arguments, reed enters interactive mode. Type or paste text and press Enter to hear it read aloud.
 
-#### Visual Enhancements
-
-- **Beautiful banner** with colors and icons
-- **Spinner animation** while generating speech
-- **Enhanced status messages** with panels and success indicators
-
 #### Commands
 
 - Type text and press Enter to hear it
