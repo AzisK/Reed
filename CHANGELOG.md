@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Platform abstraction
+- **macOS and Linux support**: Audio playback and clipboard commands are now auto-detected at runtime instead of being hardcoded to macOS tools.
+  - Audio: `afplay` (macOS), `paplay`/`aplay`/`ffplay` (Linux)
+  - Clipboard: `pbpaste` (macOS), `wl-paste`/`xclip`/`xsel` (Linux)
+- **`get_text()` now uses injected `run`**: The clipboard path previously called `subprocess.run` directly, bypassing the dependency injection pattern used everywhere else. Now consistent.
+
 ### Rich terminal UI
 - **Added Rich library** for styled terminal output (colors, panels, spinners).
 - **Interactive banner** with styled markup replaces plain-text banner lines.
@@ -34,6 +40,6 @@
 - **Dependencies declared**: `piper-tts`, `prompt-toolkit`, and `rich` listed in `pyproject.toml`; `mypy` and `pytest` as optional dev dependencies.
 
 ### Tests
-- **32 tests** (up from 25): added coverage for `/replay` (with and without prior text), `/clear` (verifies `clear_fn` called), afplay failure, missing model error, empty text error, `ReedError` propagation through `main`, `_should_enter_interactive` with `None` stdin, and `get_text` with text args.
+- **44 tests** (up from 25): added coverage for platform detection (`_default_play_cmd`, `_default_clipboard_cmd`), clipboard `run` injection, `/replay` (with and without prior text), `/clear` (verifies `clear_fn` called), afplay failure, missing model error, empty text error, `ReedError` propagation through `main`, `_should_enter_interactive` with `None` stdin, and `get_text` with text args.
 - Banner test now captures `print_fn` output and verifies the banner was actually printed.
 - `TestMainErrors` uses Rich `Console` capture for end-to-end error message verification.

@@ -2,6 +2,8 @@
 """reed - A CLI that reads text aloud using piper-tts."""
 
 import argparse
+import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -54,9 +56,42 @@ COMMANDS = {
 }
 
 
-def get_text(args: argparse.Namespace, stdin: TextIO) -> str:
+def _default_play_cmd() -> list[str]:
+    if platform.system() == "Darwin":
+        return ["afplay"]
+    if platform.system() == "Linux":
+        for cmd, args in [
+            ("paplay", []),
+            ("aplay", []),
+            ("ffplay", ["-nodisp", "-autoexit"]),
+        ]:
+            if shutil.which(cmd):
+                return [cmd, *args]
+    raise ReedError("No supported audio player found")
+
+
+def _default_clipboard_cmd() -> list[str]:
+    if platform.system() == "Darwin":
+        return ["pbpaste"]
+    if platform.system() == "Linux":
+        for cmd, args in [
+            ("wl-paste", []),
+            ("xclip", ["-selection", "clipboard", "-o"]),
+            ("xsel", ["--clipboard", "--output"]),
+        ]:
+            if shutil.which(cmd):
+                return [cmd, *args]
+    raise ReedError("No supported clipboard tool found")
+
+
+def get_text(
+    args: argparse.Namespace,
+    stdin: TextIO,
+    run: Callable = subprocess.run,
+) -> str:
     if args.clipboard:
-        result = subprocess.run(["pbpaste"], capture_output=True, text=True)
+        clipboard_cmd = _default_clipboard_cmd()
+        result = run(clipboard_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise ReedError("Failed to read clipboard")
         return result.stdout.strip()
@@ -175,9 +210,10 @@ def speak_text(
                 f"\n[bold green]✓ Generated in {time.time() - start:.1f}s[/bold green]"
             )
             print_playback_progress(print_fn)
-            result = run(["afplay", tmp.name])
+            play_cmd = _default_play_cmd()
+            result = run([*play_cmd, tmp.name])
             if result.returncode != 0:
-                raise ReedError("afplay error")
+                raise ReedError("playback error")
             print_fn("[bold green]✓ Done[/bold green]")
 
 
@@ -340,7 +376,7 @@ def main(
 
     try:
         assert stdin is not None
-        text = get_text(args, stdin)
+        text = get_text(args, stdin, run=run)
 
         if not text:
             print_error("No text to read.", print_fn)

@@ -261,8 +261,8 @@ class TestBuildPiperCmd:
 
 
 class TestSpeakText:
-    def test_play_path_calls_piper_then_afplay(self):
-        from reed import speak_text
+    def test_play_path_calls_piper_then_player(self):
+        from reed import speak_text, _default_play_cmd
 
         calls = []
 
@@ -276,7 +276,8 @@ class TestSpeakText:
         assert len(calls) == 2
         assert calls[0][0][1:3] == ["-m", "piper"]
         assert calls[0][1].get("input") == "hi"
-        assert calls[1][0][0] == "afplay"
+        play_cmd = _default_play_cmd()
+        assert calls[1][0][: len(play_cmd)] == play_cmd
 
     def test_output_path_no_afplay(self):
         from reed import speak_text
@@ -305,8 +306,8 @@ class TestSpeakText:
         with pytest.raises(ReedError, match="boom"):
             speak_text("hi", config, run=fake_run)
 
-    def test_afplay_error_raises(self):
-        from reed import ReedError, speak_text
+    def test_playback_error_raises(self):
+        from reed import speak_text, ReedError
 
         call_count = 0
 
@@ -317,9 +318,9 @@ class TestSpeakText:
                 return types.SimpleNamespace(returncode=0, stderr="")
             return types.SimpleNamespace(returncode=1, stderr="")
 
-        config = _make_config()
-        with pytest.raises(ReedError, match="afplay error"):
-            speak_text("hi", config, run=fake_run)
+        args = _make_args()
+        with pytest.raises(ReedError, match="playback error"):
+            speak_text("hi", args, run=fake_run)
 
 
 # ─── main integration tests ──────────────────────────────────────────
@@ -398,6 +399,152 @@ class TestShouldEnterInteractive:
 
         args = _make_args()
         assert _should_enter_interactive(args, None) is False
+
+
+# ─── _default_play_cmd tests ──────────────────────────────────────────
+
+
+class TestDefaultPlayCmd:
+    def test_macos_returns_afplay(self, monkeypatch):
+        from reed import _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
+        assert _default_play_cmd() == ["afplay"]
+
+    def test_linux_paplay(self, monkeypatch):
+        from reed import _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: "/usr/bin/paplay" if cmd == "paplay" else None,
+        )
+        assert _default_play_cmd() == ["paplay"]
+
+    def test_linux_aplay_fallback(self, monkeypatch):
+        from reed import _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: "/usr/bin/aplay" if cmd == "aplay" else None,
+        )
+        assert _default_play_cmd() == ["aplay"]
+
+    def test_linux_ffplay_fallback(self, monkeypatch):
+        from reed import _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: "/usr/bin/ffplay" if cmd == "ffplay" else None,
+        )
+        assert _default_play_cmd() == ["ffplay", "-nodisp", "-autoexit"]
+
+    def test_linux_no_player_raises(self, monkeypatch):
+        from reed import _default_play_cmd, ReedError
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr("reed.shutil.which", lambda cmd: None)
+        with pytest.raises(ReedError, match="No supported audio player found"):
+            _default_play_cmd()
+
+    def test_unknown_platform_raises(self, monkeypatch):
+        from reed import _default_play_cmd, ReedError
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Windows")
+        with pytest.raises(ReedError, match="No supported audio player found"):
+            _default_play_cmd()
+
+
+# ─── _default_clipboard_cmd tests ────────────────────────────────────
+
+
+class TestDefaultClipboardCmd:
+    def test_macos_returns_pbpaste(self, monkeypatch):
+        from reed import _default_clipboard_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
+        assert _default_clipboard_cmd() == ["pbpaste"]
+
+    def test_linux_wl_paste(self, monkeypatch):
+        from reed import _default_clipboard_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: "/usr/bin/wl-paste" if cmd == "wl-paste" else None,
+        )
+        assert _default_clipboard_cmd() == ["wl-paste"]
+
+    def test_linux_xclip_fallback(self, monkeypatch):
+        from reed import _default_clipboard_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: "/usr/bin/xclip" if cmd == "xclip" else None,
+        )
+        assert _default_clipboard_cmd() == ["xclip", "-selection", "clipboard", "-o"]
+
+    def test_linux_xsel_fallback(self, monkeypatch):
+        from reed import _default_clipboard_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr(
+            "reed.shutil.which", lambda cmd: "/usr/bin/xsel" if cmd == "xsel" else None
+        )
+        assert _default_clipboard_cmd() == ["xsel", "--clipboard", "--output"]
+
+    def test_linux_no_clipboard_raises(self, monkeypatch):
+        from reed import _default_clipboard_cmd, ReedError
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setattr("reed.shutil.which", lambda cmd: None)
+        with pytest.raises(ReedError, match="No supported clipboard tool found"):
+            _default_clipboard_cmd()
+
+    def test_unknown_platform_raises(self, monkeypatch):
+        from reed import _default_clipboard_cmd, ReedError
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Windows")
+        with pytest.raises(ReedError, match="No supported clipboard tool found"):
+            _default_clipboard_cmd()
+
+
+# ─── get_text clipboard with run injection test ──────────────────────
+
+
+class TestGetTextClipboard:
+    def test_clipboard_uses_injected_run(self):
+        from reed import get_text
+
+        def fake_run(cmd, **kwargs):
+            return types.SimpleNamespace(
+                returncode=0, stdout="clipboard text", stderr=""
+            )
+
+        class FakeTty:
+            def isatty(self):
+                return True
+
+        args = _make_args(clipboard=True)
+        result = get_text(args, stdin=FakeTty(), run=fake_run)
+        assert result == "clipboard text"
+
+    def test_clipboard_error_raises(self):
+        from reed import get_text, ReedError
+
+        def fake_run(cmd, **kwargs):
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="fail")
+
+        class FakeTty:
+            def isatty(self):
+                return True
+
+        args = _make_args(clipboard=True)
+        with pytest.raises(ReedError, match="Failed to read clipboard"):
+            get_text(args, stdin=FakeTty(), run=fake_run)
 
 
 # ─── get_text with stdin injection tests ─────────────────────────────
