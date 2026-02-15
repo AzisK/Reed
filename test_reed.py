@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Tests for reed interactive mode and core functions (TDD)."""
 
+import argparse
 import io
 import types
-import argparse
 from pathlib import Path
-
 
 import pytest
 
@@ -262,8 +261,8 @@ class TestBuildPiperCmd:
 
 
 class TestSpeakText:
-    def test_play_path_calls_piper_then_player(self, monkeypatch):
-        from reed import speak_text
+    def test_play_path_calls_piper_then_player(self):
+        from reed import speak_text, _default_play_cmd
 
         monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
 
@@ -279,7 +278,8 @@ class TestSpeakText:
         assert len(calls) == 2
         assert calls[0][0][1:3] == ["-m", "piper"]
         assert calls[0][1].get("input") == "hi"
-        assert calls[1][0][0] == "afplay"
+        play_cmd = _default_play_cmd()
+        assert calls[1][0][: len(play_cmd)] == play_cmd
 
     def test_output_path_no_afplay(self):
         from reed import speak_text
@@ -299,7 +299,7 @@ class TestSpeakText:
         assert len(calls) == 1
 
     def test_piper_error_raises(self):
-        from reed import speak_text, ReedError
+        from reed import ReedError, speak_text
 
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="boom")
