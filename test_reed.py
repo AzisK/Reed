@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Tests for reed interactive mode and core functions (TDD)."""
 
+import argparse
 import io
 import types
-import argparse
 from pathlib import Path
-
 
 import pytest
 
@@ -297,7 +296,7 @@ class TestSpeakText:
         assert len(calls) == 1
 
     def test_piper_error_raises(self):
-        from reed import speak_text, ReedError
+        from reed import ReedError, speak_text
 
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="boom")
@@ -307,7 +306,7 @@ class TestSpeakText:
             speak_text("hi", config, run=fake_run)
 
     def test_afplay_error_raises(self):
-        from reed import speak_text, ReedError
+        from reed import ReedError, speak_text
 
         call_count = 0
 
