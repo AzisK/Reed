@@ -806,6 +806,8 @@ class TestResolveModel:
             def isatty(self):
                 return True
 
+        monkeypatch.setattr("reed._default_play_cmd", lambda: ["true"])
+
         code = _reed.main(
             argv=["-m", "en_US-amy-medium", "hello"],
             run=fake_run,
@@ -825,6 +827,8 @@ class TestResolveModel:
         class FakeTty:
             def isatty(self):
                 return True
+
+        monkeypatch.setattr("reed._default_play_cmd", lambda: ["true"])
 
         code = _reed.main(
             argv=["-m", "en_US-amy-medium.onnx", "hello"],
