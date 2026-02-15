@@ -71,7 +71,7 @@ reed --silence 1 "First sentence. Second sentence. Bye bye."
 # Interactive mode (launches automatically when no input is provided)
 reed
 
-# Interactive mode with silence longer between sentences
+# Interactive mode with longer silence (1 s) between sentences
 reed --silence 1
 
 # Save to WAV file instead of playing
