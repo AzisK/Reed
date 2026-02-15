@@ -1,6 +1,6 @@
 # reed
 
-A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper). Uses the `en_US-kristin-medium` voice by default (the CLI does not download the default voice yet) 
+A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper). Uses the `en_US-kristin-medium` voice by default (auto-downloaded on first run).
 
 ## Features
 
@@ -8,6 +8,7 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 - **Pipe-friendly** — reads from stdin, works anywhere in a shell pipeline
 - **Interactive mode** — conversational TTS with `/replay`, `/help`, `/clear`, tab completion, and history
 - **Adjustable speech** — control speed (`-s`), volume (`-v`), and sentence silence (`--silence`)
+- **Voice management** — download, list, and switch voices (`reed download`, `reed voices`, `-m`)
 - **Swappable voices** — use any piper-tts `.onnx` model with `-m`
 - **WAV export** — save output to file with `-o` instead of playing
 - **Rich terminal UI** — styled output with progress indicators and error panels
@@ -28,32 +29,27 @@ uv venv
 uv pip install -e .
 ```
 
-Download a voice model and place the `.onnx` and `.onnx.json` files in the project root.
+### Voice Management
 
-### Available Voice Models
+Voices are stored in `~/.local/share/reed/` (Linux/macOS, respects `XDG_DATA_HOME`) or `%LOCALAPPDATA%\reed\` (Windows).
 
-All voice models are hosted on Hugging Face: [https://huggingface.co/rhasspy/piper-voices/tree/main](https://huggingface.co/rhasspy/piper-voices/tree/main)
-
-The file structure follows this pattern: `language/COUNTRY/voice_name/quality/`
-
-**Examples:**
-
-- `en_US-kristin-medium.onnx` (default)
-- `en_US-amy-medium.onnx`
-- `en_GB-northern_english_male-medium.onnx`
-- `de_DE-eva_k-xlow.onnx`
-
-To download a model:
-
-1. Navigate to the model directory on Hugging Face
-2. Download the `.onnx` and `.onnx.json` files
-3. Place them in the project root
-
-To use a different voice, specify the model path:
+The default voice (`en_US-kristin-medium`) is auto-downloaded on first run.
 
 ```bash
-reed -m en_US-amy-medium.onnx "Hello world"
+# Download a voice
+reed download en_US-amy-medium
+
+# List installed voices
+reed voices
+
+# Use a specific voice by name
+reed -m en_US-amy-medium "Hello world"
+
+# Or use a custom .onnx file by path
+reed -m /path/to/custom-voice.onnx "Hello world"
 ```
+
+All voice models are hosted on Hugging Face: [https://huggingface.co/rhasspy/piper-voices/tree/main](https://huggingface.co/rhasspy/piper-voices/tree/main)
 
 ## Usage
 
@@ -141,7 +137,7 @@ When launched with no arguments, reed enters interactive mode. Type or paste tex
 |------|-------------|---------|
 | `-f`, `--file` | Read text from a file | — |
 | `-c`, `--clipboard` | Read text from clipboard | — |
-| `-m`, `--model` | Path to voice model | `en_US-kristin-medium.onnx` |
+| `-m`, `--model` | Voice name or path to voice model | `en_US-kristin-medium` |
 | `-s`, `--speed` | Speech speed (lower = slower) | `1.0` |
 | `-v`, `--volume` | Volume multiplier | `1.0` |
 | `-o`, `--output` | Save to WAV file instead of playing | — |

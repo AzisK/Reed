@@ -2,7 +2,7 @@
 
 ## Project
 
-This is `reed`, a Python CLI wrapper around piper-tts for text-to-speech on macOS.
+This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 
 ## Stack
 
@@ -10,8 +10,9 @@ This is `reed`, a Python CLI wrapper around piper-tts for text-to-speech on macO
 - Python 3.14+
 - piper-tts (dependency in pyproject.toml, installed via `uv pip install -e .`)
 - macOS `afplay` for audio playback, `pbpaste` for clipboard access
+- Linux: `paplay`/`aplay`/`ffplay` for audio, `wl-paste`/`xclip`/`xsel` for clipboard
 - Rich (terminal UI library for styled output)
-- Voice model: `en_US-kristin-medium.onnx` in project root
+- Voice models stored in `~/.local/share/reed/` (Linux/macOS) or `%LOCALAPPDATA%\reed\` (Windows)
 
 ## Structure
 
@@ -21,7 +22,8 @@ This is `reed`, a Python CLI wrapper around piper-tts for text-to-speech on macO
 
 - Run: `reed "text"`
 - Interactive mode: `reed` (launches automatically when no input provided)
-- Interactive mode (explicit): `reed -i`
+- List voices: `reed voices`
+- Download voice: `reed download en_US-amy-medium`
 - Typecheck: `mypy reed.py --ignore-missing-imports`
 - Test (unit): `pytest -v`
 - Test (smoke): `echo "test" | reed -o /dev/null`
@@ -38,8 +40,9 @@ This is `reed`, a Python CLI wrapper around piper-tts for text-to-speech on macO
 
 - Single-file script, installed as console script via pyproject.toml
 - Use `argparse` for CLI argument parsing
-- Use `subprocess` to invoke piper and afplay
-- Default model path is resolved relative to the script location
+- Use `subprocess` to invoke piper and platform audio player
+- Default model auto-downloaded to `_data_dir()` on first run
+- `ReedConfig` dataclass for core configuration (not `argparse.Namespace`)
 
  ## UI Development
 

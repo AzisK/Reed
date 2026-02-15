@@ -619,3 +619,221 @@ class TestMainErrors:
         )
         assert code == 1
         assert "piper exploded" in output
+
+
+# ─── _data_dir tests ─────────────────────────────────────────────────
+
+
+class TestDataDir:
+    def test_linux_default(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+        monkeypatch.setattr("reed.Path.home", lambda: tmp_path)
+        d = _reed._data_dir()
+        assert d == tmp_path / ".local" / "share" / "reed"
+        assert d.is_dir()
+
+    def test_linux_xdg(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed.platform.system", lambda: "Linux")
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "custom"))
+        d = _reed._data_dir()
+        assert d == tmp_path / "custom" / "reed"
+        assert d.is_dir()
+
+    def test_macos_default(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+        monkeypatch.setattr("reed.Path.home", lambda: tmp_path)
+        d = _reed._data_dir()
+        assert d == tmp_path / ".local" / "share" / "reed"
+
+    def test_windows(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed.platform.system", lambda: "Windows")
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+        d = _reed._data_dir()
+        assert d == tmp_path / "Local" / "reed"
+        assert d.is_dir()
+
+
+# ─── _model_url tests ────────────────────────────────────────────────
+
+
+class TestModelUrl:
+    def test_kristin(self):
+        onnx, json_ = _reed._model_url("en_US-kristin-medium")
+        assert onnx == (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+            "en/en_US/kristin/medium/en_US-kristin-medium.onnx"
+        )
+        assert json_ == (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+            "en/en_US/kristin/medium/en_US-kristin-medium.onnx.json"
+        )
+
+    def test_northern_english_male(self):
+        onnx, json_ = _reed._model_url("en_GB-northern_english_male-medium")
+        assert onnx == (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+            "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx"
+        )
+        assert json_ == (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+            "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx.json"
+        )
+
+    def test_de_DE_eva_k_x_low(self):
+        onnx, json_ = _reed._model_url("de_DE-eva_k-x_low")
+        assert onnx == (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+            "de/de_DE/eva_k/x_low/de_DE-eva_k-x_low.onnx"
+        )
+        assert json_ == (
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+            "de/de_DE/eva_k/x_low/de_DE-eva_k-x_low.onnx.json"
+        )
+
+
+# ─── ensure_model tests ──────────────────────────────────────────────
+
+
+class TestEnsureModel:
+    def test_exists_is_noop(self, tmp_path):
+        model = tmp_path / "test.onnx"
+        model.touch()
+        config = ReedConfig(model=model)
+        _reed.ensure_model(config, print_fn=lambda *a, **k: None)
+
+    def test_not_in_data_dir_raises(self, tmp_path):
+        config = ReedConfig(model=tmp_path / "nonexistent.onnx")
+        with pytest.raises(_reed.ReedError, match="Model not found"):
+            _reed.ensure_model(config, print_fn=lambda *a, **k: None)
+
+    def test_in_data_dir_downloads(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed._data_dir", lambda: tmp_path)
+        model = tmp_path / "en_US-kristin-medium.onnx"
+        config = ReedConfig(model=model)
+
+        downloaded = []
+
+        def fake_urlretrieve(url, dest):
+            Path(dest).touch()
+            downloaded.append((url, str(dest)))
+
+        monkeypatch.setattr("reed.urllib.request.urlretrieve", fake_urlretrieve)
+        _reed.ensure_model(config, print_fn=lambda *a, **k: None)
+        assert len(downloaded) == 2
+        assert model.exists()
+        assert model.with_suffix(".onnx.json").exists()
+
+
+# ─── list voices tests ───────────────────────────────────────────────
+
+
+class TestListVoices:
+    def _run_voices(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed._data_dir", lambda: tmp_path)
+        from rich.console import Console as RichConsole
+
+        cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
+        code = _reed.main(
+            argv=["voices"],
+            print_fn=cap_console.print,
+            stdin=io.StringIO(""),
+        )
+        output = cap_console.file.getvalue()
+        return code, output
+
+    def test_empty_dir(self, monkeypatch, tmp_path):
+        code, output = self._run_voices(monkeypatch, tmp_path)
+        assert code == 0
+        assert "No voices installed" in output
+
+    def test_with_voices(self, monkeypatch, tmp_path):
+        (tmp_path / "en_US-kristin-medium.onnx").write_bytes(b"\x00" * 1024)
+        (tmp_path / "en_US-amy-medium.onnx").write_bytes(b"\x00" * 2048)
+        monkeypatch.setattr("reed.DEFAULT_MODEL_NAME", "en_US-kristin-medium")
+        code, output = self._run_voices(monkeypatch, tmp_path)
+        assert code == 0
+        assert "en_US-kristin-medium" in output
+        assert "en_US-amy-medium" in output
+
+
+# ─── download voice tests ────────────────────────────────────────────
+
+
+class TestDownloadVoice:
+    def test_download_both_files(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed._data_dir", lambda: tmp_path)
+        downloaded = []
+
+        def fake_urlretrieve(url, dest):
+            Path(dest).touch()
+            downloaded.append(url)
+
+        monkeypatch.setattr("reed.urllib.request.urlretrieve", fake_urlretrieve)
+
+        from rich.console import Console as RichConsole
+
+        cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
+        code = _reed.main(
+            argv=["download", "en_US-amy-medium"],
+            print_fn=cap_console.print,
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert len(downloaded) == 2
+        assert any(".onnx.json" in u for u in downloaded)
+        assert (tmp_path / "en_US-amy-medium.onnx").exists()
+
+
+# ─── resolve model tests ─────────────────────────────────────────────
+
+
+class TestResolveModel:
+    def test_short_name_resolves_to_data_dir(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed._data_dir", lambda: tmp_path)
+        model_file = tmp_path / "en_US-amy-medium.onnx"
+        model_file.touch()
+
+        from rich.console import Console as RichConsole
+
+        cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
+
+        def fake_run(cmd, **kwargs):
+            return types.SimpleNamespace(returncode=0, stderr="")
+
+        class FakeTty:
+            def isatty(self):
+                return True
+
+        monkeypatch.setattr("reed._default_play_cmd", lambda: ["true"])
+
+        code = _reed.main(
+            argv=["-m", "en_US-amy-medium", "hello"],
+            run=fake_run,
+            print_fn=cap_console.print,
+            stdin=FakeTty(),
+        )
+        assert code == 0
+
+    def test_short_name_with_onnx_suffix(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("reed._data_dir", lambda: tmp_path)
+        model_file = tmp_path / "en_US-amy-medium.onnx"
+        model_file.touch()
+
+        def fake_run(cmd, **kwargs):
+            return types.SimpleNamespace(returncode=0, stderr="")
+
+        class FakeTty:
+            def isatty(self):
+                return True
+
+        monkeypatch.setattr("reed._default_play_cmd", lambda: ["true"])
+
+        code = _reed.main(
+            argv=["-m", "en_US-amy-medium.onnx", "hello"],
+            run=fake_run,
+            print_fn=lambda *a, **k: None,
+            stdin=FakeTty(),
+        )
+        assert code == 0

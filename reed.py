@@ -2,12 +2,14 @@
 """reed - A CLI that reads text aloud using piper-tts."""
 
 import argparse
+import os
 import platform
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, TextIO
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 console = Console()
@@ -27,7 +30,38 @@ class ReedError(Exception):
     pass
 
 
-DEFAULT_MODEL = Path(__file__).parent / "en_US-kristin-medium.onnx"
+def _data_dir() -> Path:
+    system = platform.system()
+    if system == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    d = base / "reed"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+DEFAULT_MODEL_NAME = "en_US-kristin-medium"
+DEFAULT_MODEL = _data_dir() / f"{DEFAULT_MODEL_NAME}.onnx"
+
+
+def _model_url(name: str) -> tuple[str, str]:
+    parts = name.split("-")
+    lang_code = parts[0]
+    quality = parts[-1]
+    voice_name = "_".join(parts[1:-1])
+    family = lang_code[:2]
+    base = (
+        f"https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+        f"{family}/{lang_code}/{voice_name}/{quality}/{name}"
+    )
+    return (f"{base}.onnx", f"{base}.onnx.json")
+
+
+def _download_file(url: str, dest: Path, print_fn: Callable = console.print) -> None:
+    print_fn(f"[bold cyan]⬇ Downloading[/bold cyan] {escape(dest.name)}…")
+    urllib.request.urlretrieve(url, dest)
+    print_fn(f"[bold green]✓ Saved[/bold green] {escape(str(dest))}")
 
 
 @dataclass(frozen=True)
@@ -37,6 +71,17 @@ class ReedConfig:
     volume: float = 1.0
     silence: float = 0.6
     output: Optional[Path] = None
+
+
+def ensure_model(config: ReedConfig, print_fn: Callable = console.print) -> None:
+    if config.model.exists():
+        return
+    if config.model.parent != _data_dir():
+        raise ReedError(f"Model not found: {config.model}")
+    name = config.model.stem
+    onnx_url, json_url = _model_url(name)
+    _download_file(onnx_url, config.model, print_fn)
+    _download_file(json_url, config.model.with_suffix(".onnx.json"), print_fn)
 
 
 QUIT_WORDS = ("/quit", "/exit")
@@ -326,7 +371,7 @@ def main(
         "-c", "--clipboard", action="store_true", help="Read text from clipboard"
     )
     parser.add_argument(
-        "-m", "--model", type=Path, default=DEFAULT_MODEL, help="Path to voice model"
+        "-m", "--model", default=None, help="Voice name or path to voice model"
     )
     parser.add_argument(
         "-s",
@@ -353,8 +398,61 @@ def main(
     )
     args = parser.parse_args(argv)
 
+    # Resolve model: None → default, short name → data dir path
+    if args.model is None:
+        model_path = DEFAULT_MODEL
+    else:
+        model_path = Path(args.model)
+        if not model_path.exists() and "/" not in args.model and "\\" not in args.model:
+            name = args.model
+            if not name.endswith(".onnx"):
+                name += ".onnx"
+            model_path = _data_dir() / name
+
+    # ── reed voices ──────────────────────────────────────────────
+    if args.text == ["voices"]:
+        data = _data_dir()
+        models = sorted(data.glob("*.onnx"))
+        if not models:
+            print_fn("[dim]No voices installed.[/dim]")
+            print_fn(
+                f"[dim]Download one with:[/dim] reed download {DEFAULT_MODEL_NAME}"
+            )
+            return 0
+        table = Table(title="Installed Voices")
+        table.add_column("Name", style="cyan")
+        table.add_column("Size (MB)", justify="right")
+        table.add_column("", justify="center")
+        for m in models:
+            star = "⭐" if m.stem == DEFAULT_MODEL_NAME else ""
+            size_mb = f"{m.stat().st_size / 1_048_576:.1f}"
+            table.add_row(m.stem, size_mb, star)
+        print_fn(table)
+        return 0
+
+    # ── reed download <name> ─────────────────────────────────────
+    if args.text and args.text[0] == "download":
+        if len(args.text) < 2:
+            print_error("Usage: reed download <voice-name>", print_fn)
+            return 1
+        name = args.text[1]
+        if name.endswith(".onnx"):
+            name = name[:-5]
+        onnx_url, json_url = _model_url(name)
+        dest = _data_dir() / f"{name}.onnx"
+        try:
+            _download_file(onnx_url, dest, print_fn)
+            _download_file(json_url, dest.with_suffix(".onnx.json"), print_fn)
+        except Exception as e:
+            print_error(f"Download failed: {e}", print_fn)
+            return 1
+        print_fn(
+            f'\n[bold green]✓ Voice ready![/bold green] Use with: reed -m {name} "Hello"'
+        )
+        return 0
+
     config = ReedConfig(
-        model=args.model,
+        model=model_path,
         speed=args.speed,
         volume=args.volume,
         silence=args.silence,
@@ -362,8 +460,10 @@ def main(
     )
 
     if _should_enter_interactive(args, stdin):
-        if not config.model.exists():
-            print_error(f"Model not found: {config.model}", print_fn)
+        try:
+            ensure_model(config, print_fn)
+        except ReedError as e:
+            print_error(str(e), print_fn)
             return 1
         loop_fn = interactive_loop_fn or interactive_loop
         code = loop_fn(
@@ -382,10 +482,7 @@ def main(
             print_error("No text to read.", print_fn)
             return 1
 
-        if not config.model.exists():
-            print_error(f"Model not found: {config.model}", print_fn)
-            return 1
-
+        ensure_model(config, print_fn)
         speak_text(text, config, run=run, print_fn=print_fn)
     except ReedError as e:
         print_error(str(e), print_fn)
