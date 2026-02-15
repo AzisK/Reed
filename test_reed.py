@@ -261,8 +261,10 @@ class TestBuildPiperCmd:
 
 
 class TestSpeakText:
-    def test_play_path_calls_piper_then_player(self):
-        from reed import speak_text, _default_play_cmd
+    def test_play_path_calls_piper_then_player(self, monkeypatch):
+        from reed import _default_play_cmd, speak_text
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
 
         calls = []
 
@@ -306,8 +308,10 @@ class TestSpeakText:
         with pytest.raises(ReedError, match="boom"):
             speak_text("hi", config, run=fake_run)
 
-    def test_playback_error_raises(self):
-        from reed import speak_text, ReedError
+    def test_playback_error_raises(self, monkeypatch):
+        from reed import ReedError, speak_text
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
 
         call_count = 0
 
@@ -442,7 +446,7 @@ class TestDefaultPlayCmd:
         assert _default_play_cmd() == ["ffplay", "-nodisp", "-autoexit"]
 
     def test_linux_no_player_raises(self, monkeypatch):
-        from reed import _default_play_cmd, ReedError
+        from reed import ReedError, _default_play_cmd
 
         monkeypatch.setattr("reed.platform.system", lambda: "Linux")
         monkeypatch.setattr("reed.shutil.which", lambda cmd: None)
@@ -450,7 +454,7 @@ class TestDefaultPlayCmd:
             _default_play_cmd()
 
     def test_unknown_platform_raises(self, monkeypatch):
-        from reed import _default_play_cmd, ReedError
+        from reed import ReedError, _default_play_cmd
 
         monkeypatch.setattr("reed.platform.system", lambda: "Windows")
         with pytest.raises(ReedError, match="No supported audio player found"):
@@ -497,7 +501,7 @@ class TestDefaultClipboardCmd:
         assert _default_clipboard_cmd() == ["xsel", "--clipboard", "--output"]
 
     def test_linux_no_clipboard_raises(self, monkeypatch):
-        from reed import _default_clipboard_cmd, ReedError
+        from reed import ReedError, _default_clipboard_cmd
 
         monkeypatch.setattr("reed.platform.system", lambda: "Linux")
         monkeypatch.setattr("reed.shutil.which", lambda cmd: None)
@@ -505,7 +509,7 @@ class TestDefaultClipboardCmd:
             _default_clipboard_cmd()
 
     def test_unknown_platform_raises(self, monkeypatch):
-        from reed import _default_clipboard_cmd, ReedError
+        from reed import ReedError, _default_clipboard_cmd
 
         monkeypatch.setattr("reed.platform.system", lambda: "Windows")
         with pytest.raises(ReedError, match="No supported clipboard tool found"):
@@ -516,8 +520,10 @@ class TestDefaultClipboardCmd:
 
 
 class TestGetTextClipboard:
-    def test_clipboard_uses_injected_run(self):
+    def test_clipboard_uses_injected_run(self, monkeypatch):
         from reed import get_text
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
 
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(
@@ -532,8 +538,10 @@ class TestGetTextClipboard:
         result = get_text(args, stdin=FakeTty(), run=fake_run)
         assert result == "clipboard text"
 
-    def test_clipboard_error_raises(self):
-        from reed import get_text, ReedError
+    def test_clipboard_error_raises(self, monkeypatch):
+        from reed import ReedError, get_text
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Darwin")
 
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stdout="", stderr="fail")
