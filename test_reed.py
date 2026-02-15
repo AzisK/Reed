@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import reed as _reed
+from reed import ReedConfig
 
 
 def _make_args(**overrides):
@@ -25,6 +26,18 @@ def _make_args(**overrides):
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
+
+
+def _make_config(**overrides):
+    defaults = dict(
+        model=Path(__file__).parent / "en_US-kristin-medium.onnx",
+        speed=1.0,
+        volume=1.0,
+        silence=0.3,
+        output=None,
+    )
+    defaults.update(overrides)
+    return ReedConfig(**defaults)
 
 
 def _make_prompt_fn(lines: list[str]):
@@ -258,8 +271,8 @@ class TestSpeakText:
             calls.append((cmd, kwargs))
             return types.SimpleNamespace(returncode=0, stderr="")
 
-        args = _make_args()
-        speak_text("hi", args, run=fake_run)
+        config = _make_config()
+        speak_text("hi", config, run=fake_run)
 
         assert len(calls) == 2
         assert calls[0][0][1:3] == ["-m", "piper"]
@@ -278,8 +291,8 @@ class TestSpeakText:
         def print_fn(*args, **kwargs):
             None
 
-        args = _make_args(output=Path("/tmp/out.wav"))
-        speak_text("hi", args, run=fake_run, print_fn=print_fn)
+        config = _make_config(output=Path("/tmp/out.wav"))
+        speak_text("hi", config, run=fake_run, print_fn=print_fn)
 
         assert len(calls) == 1
 
@@ -289,9 +302,9 @@ class TestSpeakText:
         def fake_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="boom")
 
-        args = _make_args()
+        config = _make_config()
         with pytest.raises(ReedError, match="boom"):
-            speak_text("hi", args, run=fake_run)
+            speak_text("hi", config, run=fake_run)
 
     def test_afplay_error_raises(self):
         from reed import speak_text, ReedError
@@ -305,9 +318,9 @@ class TestSpeakText:
                 return types.SimpleNamespace(returncode=0, stderr="")
             return types.SimpleNamespace(returncode=1, stderr="")
 
-        args = _make_args()
+        config = _make_config()
         with pytest.raises(ReedError, match="afplay error"):
-            speak_text("hi", args, run=fake_run)
+            speak_text("hi", config, run=fake_run)
 
 
 # ─── main integration tests ──────────────────────────────────────────

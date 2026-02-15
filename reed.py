@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, TextIO
 
@@ -25,6 +26,16 @@ class ReedError(Exception):
 
 
 DEFAULT_MODEL = Path(__file__).parent / "en_US-kristin-medium.onnx"
+
+
+@dataclass(frozen=True)
+class ReedConfig:
+    model: Path = DEFAULT_MODEL
+    speed: float = 1.0
+    volume: float = 1.0
+    silence: float = 0.6
+    output: Optional[Path] = None
+
 
 QUIT_WORDS = ("/quit", "/exit")
 
@@ -87,21 +98,15 @@ def build_piper_cmd(
     return cmd
 
 
-def print_generation_progress(print_fn: Optional[Callable] = None) -> None:
-    if print_fn is None:
-        print_fn = console.print
+def print_generation_progress(print_fn: Callable = console.print) -> None:
     print_fn("[bold cyan]⠋ Generating speech...[/bold cyan]")
 
 
-def print_playback_progress(print_fn: Optional[Callable] = None) -> None:
-    if print_fn is None:
-        print_fn = console.print
+def print_playback_progress(print_fn: Callable = console.print) -> None:
     print_fn("[bold green]▶ Playing...[/bold green]")
 
 
-def print_saved_message(output: Path, print_fn: Optional[Callable] = None) -> None:
-    if print_fn is None:
-        print_fn = console.print
+def print_saved_message(output: Path, print_fn: Callable = console.print) -> None:
     panel = Panel.fit(
         f"[bold green]✓ Successfully saved[/bold green]\n\n"
         f"[dim]File:[/dim] [cyan]{escape(str(output))}[/cyan]",
@@ -111,9 +116,7 @@ def print_saved_message(output: Path, print_fn: Optional[Callable] = None) -> No
     print_fn(panel)
 
 
-def print_error(message: str, print_fn: Optional[Callable] = None) -> None:
-    if print_fn is None:
-        print_fn = console.print
+def print_error(message: str, print_fn: Callable = console.print) -> None:
     panel = Panel.fit(
         f"[bold red]{escape(message)}[/bold red]",
         title="[bold]Error[/bold]",
@@ -122,15 +125,11 @@ def print_error(message: str, print_fn: Optional[Callable] = None) -> None:
     print_fn(panel)
 
 
-def print_banner(print_fn: Optional[Callable] = None) -> None:
-    if print_fn is None:
-        print_fn = console.print
+def print_banner(print_fn: Callable = console.print) -> None:
     print_fn(Text.from_markup(BANNER_MARKUP))
 
 
-def print_help(print_fn: Optional[Callable] = None) -> None:
-    if print_fn is None:
-        print_fn = console.print
+def print_help(print_fn: Callable = console.print) -> None:
     text = Text.from_markup("\n[bold]Available Commands:[/bold]\n")
     for cmd, desc in COMMANDS.items():
         cmd_text = Text(cmd)
@@ -142,31 +141,32 @@ def print_help(print_fn: Optional[Callable] = None) -> None:
 
 def speak_text(
     text: str,
-    args: argparse.Namespace,
+    config: ReedConfig,
     run: Callable = subprocess.run,
-    print_fn: Optional[Callable] = None,
+    print_fn: Callable = console.print,
 ) -> None:
-    if print_fn is None:
-        print_fn = console.print
-
-    if args.output:
+    if config.output:
         print_generation_progress(print_fn)
         start = time.time()
         piper_cmd = build_piper_cmd(
-            args.model, args.speed, args.volume, args.silence, args.output
+            config.model, config.speed, config.volume, config.silence, config.output
         )
         proc = run(piper_cmd, input=text, text=True, capture_output=True)
         elapsed = time.time() - start
         if proc.returncode != 0:
             raise ReedError(f"piper error: {proc.stderr}")
         print_fn(f"\n[bold green]✓ Done in {elapsed:.1f}s[/bold green]")
-        print_saved_message(args.output, print_fn)
+        print_saved_message(config.output, print_fn)
     else:
         print_generation_progress(print_fn)
         start = time.time()
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
             piper_cmd = build_piper_cmd(
-                args.model, args.speed, args.volume, args.silence, Path(tmp.name)
+                config.model,
+                config.speed,
+                config.volume,
+                config.silence,
+                Path(tmp.name),
             )
             proc = run(piper_cmd, input=text, text=True, capture_output=True)
             if proc.returncode != 0:
@@ -204,15 +204,10 @@ def interactive_loop(
     speak_line: Callable[[str], None],
     prompt: str = "> ",
     quit_words: tuple[str, ...] = QUIT_WORDS,
-    print_fn: Optional[Callable] = None,
+    print_fn: Callable = console.print,
     prompt_fn: Optional[Callable[[], str]] = None,
-    clear_fn: Optional[Callable] = None,
+    clear_fn: Callable = console.clear,
 ) -> int:
-    if print_fn is None:
-        print_fn = console.print
-    if clear_fn is None:
-        clear_fn = console.clear
-
     quit_set = {w.lower() for w in quit_words}
     help_cmd = "/help"
     clear_cmd = "/clear"
@@ -280,13 +275,10 @@ def main(
     run: Callable = subprocess.run,
     interactive_loop_fn: Optional[Callable] = None,
     stdin: Optional[TextIO] = None,
-    print_fn: Optional[Callable] = None,
+    print_fn: Callable = console.print,
 ) -> int:
     if stdin is None:
         stdin = sys.stdin
-
-    if print_fn is None:
-        print_fn = console.print
 
     parser = argparse.ArgumentParser(
         prog="reed",
@@ -325,13 +317,23 @@ def main(
     )
     args = parser.parse_args(argv)
 
+    config = ReedConfig(
+        model=args.model,
+        speed=args.speed,
+        volume=args.volume,
+        silence=args.silence,
+        output=args.output,
+    )
+
     if _should_enter_interactive(args, stdin):
-        if not args.model.exists():
-            print_error(f"Model not found: {args.model}", print_fn)
+        if not config.model.exists():
+            print_error(f"Model not found: {config.model}", print_fn)
             return 1
         loop_fn = interactive_loop_fn or interactive_loop
         code = loop_fn(
-            speak_line=lambda line: speak_text(line, args, run=run, print_fn=print_fn),
+            speak_line=lambda line: speak_text(
+                line, config, run=run, print_fn=print_fn
+            ),
             print_fn=print_fn,
         )
         return code
@@ -344,11 +346,11 @@ def main(
             print_error("No text to read.", print_fn)
             return 1
 
-        if not args.model.exists():
-            print_error(f"Model not found: {args.model}", print_fn)
+        if not config.model.exists():
+            print_error(f"Model not found: {config.model}", print_fn)
             return 1
 
-        speak_text(text, args, run=run, print_fn=print_fn)
+        speak_text(text, config, run=run, print_fn=print_fn)
     except ReedError as e:
         print_error(str(e), print_fn)
         return 1
