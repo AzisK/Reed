@@ -115,7 +115,7 @@ echo "Notification" | reed -o /tmp/notify.wav && afplay /tmp/notify.wav
 git log --oneline -5 | reed
 
 # Read the content of a webpage, requires soffice (LibreOffice CLI)
-# It can be found in the LibreOffice installation directory and you can add an alias to it
+# It can be found in the LibreOffice app directory and you can add an alias to it
 # alias soffice='/Applications/LibreOffice.app/Contents/MacOS/soffice' inside `~/.zprofile` (~/.zshrc, ~/.bashrc etc.)
 curl -s https://example.com -o /tmp/page.html && \
   soffice --headless --convert-to txt /tmp/page.html --outdir /tmp && \
