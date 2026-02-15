@@ -15,7 +15,9 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 ## Requirements
 
 - Python 3.14+
-- macOS (uses `afplay` for audio playback and `pbpaste` for clipboard)
+- macOS or Linux
+  - **macOS**: `afplay` (audio), `pbpaste` (clipboard) — included with the OS
+  - **Linux**: one of `paplay`, `aplay`, or `ffplay` (audio); one of `wl-paste`, `xclip`, or `xsel` (clipboard)
 - [uv](https://docs.astral.sh/uv/) (for dependency management)
 - Rich library for beautiful terminal UI
 
