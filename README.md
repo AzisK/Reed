@@ -16,9 +16,10 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 ## Requirements
 
 - Python 3.14+
-- macOS or Linux
+- macOS, Linux, or Windows
   - **macOS**: `afplay` (audio), `pbpaste` (clipboard) — included with the OS
   - **Linux**: one of `paplay`, `aplay`, or `ffplay` (audio); one of `wl-paste`, `xclip`, or `xsel` (clipboard)
+  - **Windows**: `powershell` (audio playback) or `ffplay` fallback
 - [uv](https://docs.astral.sh/uv/) (for dependency management)
 - Rich library for beautiful terminal UI
 
@@ -110,8 +111,14 @@ reed --silence 1
 # Save to WAV file instead of playing
 reed -o output.wav 'Save this'
 
-# Play a saved WAV file
+# Play a saved WAV file (macOS)
 afplay output.wav
+
+# Play a saved WAV file (Linux)
+paplay output.wav
+
+# Play a saved WAV file (Windows PowerShell)
+powershell -NoProfile -NonInteractive -c "(New-Object System.Media.SoundPlayer 'output.wav').PlaySync()"
 
 # Adjust speed (lower = slower) and volume
 reed -s 0.8 -v 1.5 'Slower and louder'

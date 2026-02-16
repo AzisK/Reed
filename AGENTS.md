@@ -20,13 +20,14 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 
 ## Commands
 
-- Run: `reed "text"`
+- Run: `reed 'text'`
 - Interactive mode: `reed` (launches automatically when no input provided)
 - List voices: `reed voices`
 - Download voice: `reed download en_US-amy-medium`
 - Typecheck: `mypy reed.py --ignore-missing-imports`
-- Test (unit): `pytest -v`
-- Test (smoke): `echo "test" | reed -o /dev/null`
+- Sync deps: `uv sync`
+- Test (unit): `uv run pytest`
+- Test (smoke): `echo 'test' | reed -o /dev/null`
 
 ## Testing
 
@@ -34,7 +35,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 - Test file: `test_reed.py` using `pytest`
 - Tests use dependency injection (fake `run`, `stdin`, `print_fn`) to avoid real subprocess calls
 - The `reed` module is imported directly (`import reed as _reed`)
-- Run full test suite before and after every change: `pytest -v`
+- Run full test suite before and after every change: `uv run pytest -v`
 
 ## Conventions
 
@@ -42,7 +43,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 - Use `argparse` for CLI argument parsing
 - Use `subprocess` to invoke piper and platform audio player
 - Default model auto-downloaded to `_data_dir()` on first run
-- `ReedConfig` dataclass for core configuration (not `argparse.Namespace`)
+- `ReedConfig` dataclass for core configuration
 
  ## UI Development
 
@@ -52,7 +53,3 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
  - Commands available in interactive mode: `/quit`, `/exit`, `/help`, `/clear`, `/replay`
  - Tab autocomplete available for commands
  - Include `print_fn` parameter for testability with dependency injection
-
-## Git
-
-- Do NOT add `Co-authored-by` or `Amp-Thread-ID` trailers to commits

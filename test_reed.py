@@ -453,10 +453,43 @@ class TestDefaultPlayCmd:
         with pytest.raises(ReedError, match="No supported audio player found"):
             _default_play_cmd()
 
-    def test_unknown_platform_raises(self, monkeypatch):
+    def test_windows_powershell(self, monkeypatch):
+        from reed import _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+            if cmd == "powershell"
+            else None,
+        )
+        result = _default_play_cmd()
+        assert result[0] == "powershell"
+        assert "-c" in result
+        assert "System.Media.SoundPlayer" in " ".join(result)
+
+    def test_windows_ffplay_fallback(self, monkeypatch):
+        from reed import _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "Windows")
+        monkeypatch.setattr(
+            "reed.shutil.which",
+            lambda cmd: r"C:\ffmpeg\bin\ffplay.exe" if cmd == "ffplay" else None,
+        )
+        assert _default_play_cmd() == ["ffplay", "-nodisp", "-autoexit", "-hide_banner"]
+
+    def test_windows_no_player_raises(self, monkeypatch):
         from reed import ReedError, _default_play_cmd
 
         monkeypatch.setattr("reed.platform.system", lambda: "Windows")
+        monkeypatch.setattr("reed.shutil.which", lambda cmd: None)
+        with pytest.raises(ReedError, match="No supported audio player found"):
+            _default_play_cmd()
+
+    def test_unknown_platform_raises(self, monkeypatch):
+        from reed import ReedError, _default_play_cmd
+
+        monkeypatch.setattr("reed.platform.system", lambda: "FreeBSD")
         with pytest.raises(ReedError, match="No supported audio player found"):
             _default_play_cmd()
 

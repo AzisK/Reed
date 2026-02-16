@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.14"
 
 [[package]]
@@ -368,9 +368,9 @@ wheels = [
 ]
 
 [[package]]
-name = "reed"
+name = "reedy"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "pathvalidate" },
     { name = "piper-tts" },

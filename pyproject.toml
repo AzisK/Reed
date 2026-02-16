@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "reedy"
 version = "0.1.0"
@@ -24,6 +28,9 @@ dev = [
     {include-group = "lint"},
     "pre-commit>=4.5.1",
 ]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [tool.setuptools]
 py-modules = ["reed"]

@@ -112,6 +112,17 @@ def _default_play_cmd() -> list[str]:
         ]:
             if shutil.which(cmd):
                 return [cmd, *args]
+    if platform.system() == "Windows":
+        if shutil.which("powershell"):
+            return [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-c",
+                "(New-Object System.Media.SoundPlayer $args[0]).PlaySync()",
+            ]
+        if shutil.which("ffplay"):
+            return ["ffplay", "-nodisp", "-autoexit", "-hide_banner"]
     raise ReedError("No supported audio player found")
 
 
