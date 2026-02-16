@@ -43,10 +43,10 @@ reed download en_US-amy-medium
 reed voices
 
 # Use a specific voice by name
-reed -m en_US-amy-medium "Hello world"
+reed -m en_US-amy-medium 'Hello world'
 
 # Or use a custom .onnx file by path
-reed -m /path/to/custom-voice.onnx "Hello world"
+reed -m /path/to/custom-voice.onnx 'Hello world'
 ```
 
 All voice models are hosted on Hugging Face: [https://huggingface.co/rhasspy/piper-voices/tree/main](https://huggingface.co/rhasspy/piper-voices/tree/main)
@@ -55,7 +55,7 @@ All voice models are hosted on Hugging Face: [https://huggingface.co/rhasspy/pip
 
 ```bash
 # Read text directly
-reed "Hello, I will read this for you"
+reed 'Hello, I will read this for you'
 
 # Read from a file
 reed -f article.txt
@@ -64,7 +64,7 @@ reed -f article.txt
 reed -c
 
 # Add longer silence between sentences (in seconds) while the default is 0.6 seconds
-reed --silence 1 "First sentence. Second sentence. Bye bye."
+reed --silence 1 'First sentence. Second sentence. Bye bye.'
 
 # Interactive mode (launches automatically when no input is provided)
 reed
@@ -73,13 +73,13 @@ reed
 reed --silence 1
 
 # Save to WAV file instead of playing
-reed -o output.wav "Save this"
+reed -o output.wav 'Save this'
 
 # Play a saved WAV file
 afplay output.wav
 
 # Adjust speed (lower = slower) and volume
-reed -s 0.8 -v 1.5 "Slower and louder"
+reed -s 0.8 -v 1.5 'Slower and louder'
 
 # Combine speed, volume, and silence
 reed -s 0.7 -v 1.3 --silence 0.3 -f long_article.txt
