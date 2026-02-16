@@ -22,9 +22,31 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 - [uv](https://docs.astral.sh/uv/) (for dependency management)
 - Rich library for beautiful terminal UI
 
-## Setup
+## Installation
+
+### With [uv](https://docs.astral.sh/uv/) (recommended)
 
 ```bash
+uv tool install reedy
+```
+
+### With [pipx](https://pipx.pypa.io/)
+
+```bash
+pipx install reedy
+```
+
+### With pip
+
+```bash
+pip install reedy
+```
+
+### From source
+
+```bash
+git clone https://github.com/azisk/reed.git
+cd reed
 uv venv
 uv pip install -e .
 ```
@@ -142,9 +164,3 @@ When launched with no arguments, reed enters interactive mode. Type or paste tex
 | `-v`, `--volume` | Volume multiplier | `1.0` |
 | `-o`, `--output` | Save to WAV file instead of playing | — |
 | `--silence` | Seconds of silence between sentences | `0.6` |
-
-### Add to PATH
-
-```bash
-ln -s "$(pwd)/.venv/bin/reed" ~/.local/bin/reed
-```
