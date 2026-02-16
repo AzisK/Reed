@@ -3,7 +3,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .venv/
-reed.egg-info/
+reedy.egg-info/
 .DS_Store
 *.wav
 *.onnx
