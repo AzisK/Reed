@@ -2,6 +2,7 @@
 name = "reedy"
 version = "0.1.0"
 description = "A CLI that reads text aloud using piper-tts"
+readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "piper-tts",
