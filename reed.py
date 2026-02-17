@@ -10,7 +10,6 @@ import sys
 import tempfile
 import time
 import urllib.request
-from pypdf import PdfReader
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, TextIO
