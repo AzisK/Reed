@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from pypdf import PdfReader
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator, Optional, TextIO
@@ -107,9 +108,10 @@ COMMANDS = {
 
 
 def _default_play_cmd() -> list[str]:
-    if platform.system() == "Darwin":
+    system = platform.system()
+    if system == "Darwin":
         return ["afplay"]
-    if platform.system() == "Linux":
+    if system == "Linux":
         for cmd, args in [
             ("paplay", []),
             ("aplay", []),
@@ -117,7 +119,7 @@ def _default_play_cmd() -> list[str]:
         ]:
             if shutil.which(cmd):
                 return [cmd, *args]
-    if platform.system() == "Windows":
+    if system == "Windows":
         if shutil.which("powershell"):
             return [
                 "powershell",
@@ -132,9 +134,10 @@ def _default_play_cmd() -> list[str]:
 
 
 def _default_clipboard_cmd() -> list[str]:
-    if platform.system() == "Darwin":
+    system = platform.system()
+    if system == "Darwin":
         return ["pbpaste"]
-    if platform.system() == "Linux":
+    if system == "Linux":
         for cmd, args in [
             ("wl-paste", []),
             ("xclip", ["-selection", "clipboard", "-o"]),
@@ -142,7 +145,7 @@ def _default_clipboard_cmd() -> list[str]:
         ]:
             if shutil.which(cmd):
                 return [cmd, *args]
-    if platform.system() == "Windows":
+    if system == "Windows":
         return ["powershell", "-Command", "Get-Clipboard"]
     raise ReedError("No supported clipboard tool found")
 
@@ -237,7 +240,7 @@ def _iter_pdf_pages(
     if page_selection:
         page_indices = _parse_pdf_pages(page_selection, total_pages)
     else:
-        page_indices = list(range(total_pages))
+        page_indices = range(total_pages)
 
     found_any = False
     for index in page_indices:
@@ -411,17 +414,18 @@ def interactive_loop(
             if not text:
                 continue
 
-            if text.lower() in quit_set:
+            cmd = text.lower()
+            if cmd in quit_set:
                 return 0
-            elif text.lower() == help_cmd:
+            elif cmd == help_cmd:
                 print_help(print_fn)
                 print_fn("")
                 continue
-            elif text.lower() == clear_cmd:
+            elif cmd == clear_cmd:
                 clear_fn()
                 print_banner(print_fn)
                 continue
-            elif text.lower() == replay_cmd:
+            elif cmd == replay_cmd:
                 if last_text:
                     speak_line(last_text)
                     print_fn("")
@@ -500,9 +504,13 @@ def main(
         help="Seconds of silence between sentences",
     )
     args = parser.parse_args(argv)
-    if args.pages and not args.file:
-        print_error("--pages requires --file <PDF>", print_fn)
-        return 1
+    if args.pages:
+        if not args.file:
+            print_error("--pages requires --file <PDF>", print_fn)
+            return 1
+        if Path(args.file).suffix.lower() != ".pdf":
+            print_error("--pages can only be used with PDF files", print_fn)
+            return 1
 
     # Resolve model: None → default, short name → data dir path
     if args.model is None:
@@ -565,12 +573,14 @@ def main(
         output=args.output,
     )
 
+    # Ensure model is available before any speaking mode
+    try:
+        ensure_model(config, print_fn)
+    except ReedError as e:
+        print_error(str(e), print_fn)
+        return 1
+
     if _should_enter_interactive(args, stdin):
-        try:
-            ensure_model(config, print_fn)
-        except ReedError as e:
-            print_error(str(e), print_fn)
-            return 1
         loop_fn = interactive_loop_fn or interactive_loop
         code = loop_fn(
             speak_line=lambda line: speak_text(
@@ -583,9 +593,7 @@ def main(
     try:
         assert stdin is not None
 
-        # PDF: generate and play one page at a time
         if args.file and Path(args.file).suffix.lower() == ".pdf":
-            ensure_model(config, print_fn)
             for page_num, total, page_text in _iter_pdf_pages(
                 Path(args.file), args.pages
             ):
@@ -599,7 +607,6 @@ def main(
             print_error("No text to read.", print_fn)
             return 1
 
-        ensure_model(config, print_fn)
         speak_text(text, config, run=run, print_fn=print_fn)
     except ReedError as e:
         print_error(str(e), print_fn)
