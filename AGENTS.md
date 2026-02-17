@@ -8,9 +8,11 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 
 - uv — package manager and virtual environment tool
 - Python 3.14+
-- piper-tts (dependency in pyproject.toml, installed via `uv pip install -e .`)
+- piper-tts (dependency in pyproject.toml, run via `uv run reed`)
+- pypdf (PDF text extraction)
 - macOS `afplay` for audio playback, `pbpaste` for clipboard access
 - Linux: `paplay`/`aplay`/`ffplay` for audio, `wl-paste`/`xclip`/`xsel` for clipboard
+- Windows: `powershell`/`ffplay` for audio, `powershell Get-Clipboard` for clipboard
 - Rich (terminal UI library for styled output)
 - Voice models stored in `~/.local/share/reed/` (Linux/macOS) or `%LOCALAPPDATA%\reed\` (Windows)
 
@@ -21,6 +23,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 ## Commands
 
 - Run: `reed 'text'`
+- Read PDF: `reed -f doc.pdf` or `reed -f doc.pdf --pages 1,3-5`
 - Interactive mode: `reed` (launches automatically when no input provided)
 - List voices: `reed voices`
 - Download voice: `reed download en_US-amy-medium`
@@ -31,7 +34,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 
 ## Testing
 
-- **Always write tests first (TDD)** — create failing tests before implementing features
+- Always write tests first (TDD) — create failing tests before implementing features
 - Test file: `test_reed.py` using `pytest`
 - Tests use dependency injection (fake `run`, `stdin`, `print_fn`) to avoid real subprocess calls
 - The `reed` module is imported directly (`import reed as _reed`)
@@ -48,7 +51,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
  ## UI Development
 
  - Use Rich library for terminal UI enhancements (colors, panels, spinners, tables)
- - Bannerstyled with rich markup in `BANNER_MARKUP` constant
+ - Banner styled with rich markup in `BANNER_MARKUP` constant
  - Visual feedback includes spinner during TTS generation
  - Commands available in interactive mode: `/quit`, `/exit`, `/help`, `/clear`, `/replay`
  - Tab autocomplete available for commands

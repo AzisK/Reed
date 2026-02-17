@@ -324,6 +324,7 @@ def speak_text(
     config: ReedConfig,
     run: Callable = subprocess.run,
     print_fn: Callable = console.print,
+    play_cmd: Optional[list[str]] = None,
 ) -> None:
     if config.output:
         print_generation_progress(print_fn)
@@ -355,8 +356,8 @@ def speak_text(
                 f"\n[bold green]✓ Generated in {time.time() - start:.1f}s[/bold green]"
             )
             print_playback_progress(print_fn)
-            play_cmd = _default_play_cmd()
-            result = run([*play_cmd, tmp.name])
+            resolved_play_cmd = play_cmd or _default_play_cmd()
+            result = run([*resolved_play_cmd, tmp.name])
             if result.returncode != 0:
                 raise ReedError("playback error")
             print_fn("[bold green]✓ Done[/bold green]")
@@ -579,11 +580,13 @@ def main(
         print_error(str(e), print_fn)
         return 1
 
+    play_cmd = _default_play_cmd() if not config.output else None
+
     if _should_enter_interactive(args, stdin):
         loop_fn = interactive_loop_fn or interactive_loop
         code = loop_fn(
             speak_line=lambda line: speak_text(
-                line, config, run=run, print_fn=print_fn
+                line, config, run=run, print_fn=print_fn, play_cmd=play_cmd
             ),
             print_fn=print_fn,
         )
@@ -597,7 +600,9 @@ def main(
                 Path(args.file), args.pages
             ):
                 print_fn(f"\n[bold cyan]📄 Page {page_num}/{total}[/bold cyan]")
-                speak_text(page_text, config, run=run, print_fn=print_fn)
+                speak_text(
+                    page_text, config, run=run, print_fn=print_fn, play_cmd=play_cmd
+                )
             return 0
 
         text = get_text(args, stdin, run=run)
@@ -606,7 +611,7 @@ def main(
             print_error("No text to read.", print_fn)
             return 1
 
-        speak_text(text, config, run=run, print_fn=print_fn)
+        speak_text(text, config, run=run, print_fn=print_fn, play_cmd=play_cmd)
     except ReedError as e:
         print_error(str(e), print_fn)
         return 1
