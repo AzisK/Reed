@@ -6,6 +6,7 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 
 - **Multiple input sources** — text argument, file (`-f`), clipboard (`-c`), or stdin
 - **PDF support** — read full PDFs or selected pages with `--pages`
+- **EPUB support** — read EPUB e-books, select chapters with `--pages`
 - **Pipe-friendly** — reads from stdin, works anywhere in a shell pipeline
 - **Interactive mode** — conversational TTS with `/replay`, `/help`, `/clear`, tab completion, and history
 - **Adjustable speech** — control speed (`-s`), volume (`-v`), and sentence silence (`--silence`)
@@ -78,6 +79,12 @@ reed -f book.pdf
 
 # Read selected pages from a PDF (1-based)
 reed -f book.pdf --pages 1,3-5
+
+# Read an EPUB e-book
+reed -f book.epub
+
+# Read selected chapters from an EPUB
+reed -f book.epub --pages 1,3-5
 
 # Read from clipboard
 reed -c
@@ -183,7 +190,7 @@ All voice models are hosted on Hugging Face: [https://huggingface.co/rhasspy/pip
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-f`, `--file` | Read text from a file | — |
-| `--pages` | PDF pages to read (1-based), e.g. `1,3-5` | — |
+| `--pages` | PDF pages or EPUB chapters to read (1-based), e.g. `1,3-5` | — |
 | `-c`, `--clipboard` | Read text from clipboard | — |
 | `-m`, `--model` | Voice name or path to voice model | `en_US-kristin-medium` |
 | `-s`, `--speed` | Speech speed (lower = slower) | `1.0` |

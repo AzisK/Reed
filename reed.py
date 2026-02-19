@@ -10,9 +10,12 @@ import sys
 import tempfile
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
+import zipfile
+from html.parser import HTMLParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterator, Optional, TextIO
+from typing import TYPE_CHECKING, Callable, Iterator, Optional, Sequence, TextIO
 
 if TYPE_CHECKING:
     from prompt_toolkit import PromptSession
@@ -20,7 +23,7 @@ if TYPE_CHECKING:
 try:
     from pypdf import PdfReader
 except ImportError:  # pragma: no cover - validated in runtime error path
-    PdfReader = None
+    PdfReader = None  # type: ignore[assignment,misc]
 
 from rich.console import Console
 from rich.markup import escape
@@ -164,7 +167,7 @@ def get_text(
     if args.file:
         file_path = Path(args.file)
         if args.pages:
-            raise ReedError("--pages can only be used with PDF files")
+            raise ReedError("--pages can only be used with PDF or EPUB files")
         return file_path.read_text()
 
     if not stdin.isatty():
@@ -176,8 +179,10 @@ def get_text(
     raise ReedError("No input provided. Use --help for usage.")
 
 
-def _parse_pdf_pages(page_selection: str, total_pages: int) -> list[int]:
-    selection = page_selection.strip()
+def _parse_range_selection(
+    selection_str: str, total: int, label: str = "page"
+) -> list[int]:
+    selection = selection_str.strip()
     if not selection:
         raise ReedError("Invalid page selection")
 
@@ -196,7 +201,7 @@ def _parse_pdf_pages(page_selection: str, total_pages: int) -> list[int]:
             end = int(bounds[1])
             if start < 1 or end < 1 or end < start:
                 raise ReedError("Invalid page selection")
-            pages = range(start, end + 1)
+            pages: Sequence[int] = range(start, end + 1)
         else:
             if not token.isdigit():
                 raise ReedError("Invalid page selection")
@@ -206,9 +211,9 @@ def _parse_pdf_pages(page_selection: str, total_pages: int) -> list[int]:
             pages = [page]
 
         for page in pages:
-            if page > total_pages:
+            if page > total:
                 raise ReedError(
-                    f"Page {page} is out of range (PDF has {total_pages} pages)"
+                    f"{label.title()} {page} is out of range (total: {total})"
                 )
             index = page - 1
             if index not in seen:
@@ -237,7 +242,9 @@ def _iter_pdf_pages(
         raise ReedError("PDF has no pages")
 
     if page_selection:
-        page_indices = _parse_pdf_pages(page_selection, total_pages)
+        page_indices: Sequence[int] = _parse_range_selection(
+            page_selection, total_pages
+        )
     else:
         page_indices = range(total_pages)
 
@@ -251,6 +258,149 @@ def _iter_pdf_pages(
 
     if not found_any:
         raise ReedError("No extractable text found in PDF")
+
+
+_BLOCK_TAGS = frozenset(
+    {
+        "p",
+        "div",
+        "br",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "tr",
+        "blockquote",
+        "section",
+        "article",
+    }
+)
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Extract plain text from HTML, stripping all tags."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in _BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_text(self) -> str:
+        raw = "".join(self._parts)
+        lines = raw.split("\n")
+        paragraphs = [" ".join(line.split()) for line in lines]
+        return "\n".join(paragraphs).strip()
+
+
+def _strip_html(html_bytes: bytes) -> str:
+    extractor = _HTMLTextExtractor()
+    extractor.feed(html_bytes.decode("utf-8", errors="replace"))
+    return extractor.get_text()
+
+
+def _load_epub_spine(path: Path) -> list[tuple[str, zipfile.ZipFile]]:
+    """Parse EPUB spine and return ``(href, zip_file)`` pairs in reading order.
+
+    Only reads the OPF manifest (lightweight), does NOT decompress chapter content.
+    Each item is a tuple of ``(internal_path, ZipFile)`` so callers can lazily
+    read individual chapters with ``zf.read(href)``.
+    """
+    try:
+        zf = zipfile.ZipFile(str(path), "r")
+    except Exception as e:
+        raise ReedError(f"Failed to open EPUB: {e}")
+
+    try:
+        container_xml = zf.read("META-INF/container.xml")
+    except KeyError:
+        zf.close()
+        raise ReedError("Invalid EPUB: missing META-INF/container.xml")
+
+    container = ET.fromstring(container_xml)
+    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+    rootfile_el = container.find(".//c:rootfile", ns)
+    if rootfile_el is None:
+        zf.close()
+        raise ReedError("Invalid EPUB: no rootfile in container.xml")
+    opf_path = rootfile_el.get("full-path", "")
+
+    try:
+        opf_xml = zf.read(opf_path)
+    except KeyError:
+        zf.close()
+        raise ReedError(f"Invalid EPUB: missing {opf_path}")
+
+    opf = ET.fromstring(opf_xml)
+    opf_ns = opf.tag.split("}")[0] + "}" if "}" in opf.tag else ""
+    opf_dir = opf_path.rsplit("/", 1)[0] + "/" if "/" in opf_path else ""
+
+    manifest: dict[str, str] = {}
+    for item in opf.findall(f".//{opf_ns}manifest/{opf_ns}item"):
+        item_id = item.get("id", "")
+        href = item.get("href", "")
+        media = item.get("media-type", "")
+        props = item.get("properties", "")
+        if media == "application/xhtml+xml" and "nav" not in props:
+            manifest[item_id] = opf_dir + href
+
+    spine_hrefs: list[tuple[str, zipfile.ZipFile]] = []
+    for itemref in opf.findall(f".//{opf_ns}spine/{opf_ns}itemref"):
+        idref = itemref.get("idref", "")
+        if idref in manifest:
+            spine_hrefs.append((manifest[idref], zf))
+
+    if not spine_hrefs:
+        zf.close()
+        raise ReedError("No chapters found in EPUB")
+
+    return spine_hrefs
+
+
+def _read_epub_chapter(chapter: tuple[str, zipfile.ZipFile]) -> str:
+    """Read and strip HTML from a single EPUB chapter. Lightweight — only decompresses one file."""
+    href, zf = chapter
+    try:
+        raw = zf.read(href)
+    except KeyError:
+        return ""
+    return _strip_html(raw).strip()
+
+
+def _split_paragraphs(text: str) -> list[str]:
+    """Split text into paragraph-sized chunks for incremental TTS.
+
+    Each non-blank line becomes a separate chunk that is spoken individually
+    so playback starts quickly.
+    """
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _iter_epub_chapters(
+    path: Path, chapter_selection: Optional[str]
+) -> Iterator[tuple[int, int, str]]:
+    """Yield ``(chapter_number, total_chapters, text)`` for each selected EPUB chapter."""
+    chapters = _load_epub_spine(path)
+    total_chapters = len(chapters)
+
+    if chapter_selection:
+        chapter_indices: Sequence[int] = _parse_range_selection(
+            chapter_selection, total_chapters, label="chapter"
+        )
+    else:
+        chapter_indices = range(total_chapters)
+
+    for index in chapter_indices:
+        text = _read_epub_chapter(chapters[index])
+        yield (index + 1, total_chapters, text)
 
 
 def build_piper_cmd(
@@ -506,10 +656,10 @@ def main(
     args = parser.parse_args(argv)
     if args.pages:
         if not args.file:
-            print_error("--pages requires --file <PDF>", print_fn)
+            print_error("--pages requires --file <PDF or EPUB>", print_fn)
             return 1
-        if Path(args.file).suffix.lower() != ".pdf":
-            print_error("--pages can only be used with PDF files", print_fn)
+        if Path(args.file).suffix.lower() not in (".pdf", ".epub"):
+            print_error("--pages can only be used with PDF or EPUB files", print_fn)
             return 1
 
     # Resolve model: None → default, short name → data dir path
@@ -603,6 +753,57 @@ def main(
                 speak_text(
                     page_text, config, run=run, print_fn=print_fn, play_cmd=play_cmd
                 )
+            return 0
+
+        if args.file and Path(args.file).suffix.lower() == ".epub":
+            epub_path = Path(args.file)
+
+            def _speak_chapter(ch_text: str) -> None:
+                paragraphs = _split_paragraphs(ch_text)
+                for para in paragraphs:
+                    speak_text(
+                        para, config, run=run, print_fn=print_fn, play_cmd=play_cmd
+                    )
+
+            chapters = _load_epub_spine(epub_path)
+            total = len(chapters)
+            spoken: set[int] = set()
+
+            for ch_num, total_chapters, text in _iter_epub_chapters(
+                epub_path, args.pages
+            ):
+                if ch_num in spoken:
+                    continue
+                if text:
+                    spoken.add(ch_num)
+                    print_fn(
+                        f"\n[bold cyan]📖 Chapter {ch_num}/{total_chapters}[/bold cyan]"
+                    )
+                    _speak_chapter(text)
+                    continue
+
+                # Chapter is empty — skip to next chapter with text
+                for next_index in range(ch_num, total):
+                    next_num = next_index + 1
+                    if next_num in spoken:
+                        continue
+                    next_text = _read_epub_chapter(chapters[next_index])
+                    if next_text:
+                        spoken.add(next_num)
+                        print_fn(
+                            f"\n[yellow]⏭ Chapter {ch_num}/{total_chapters} has no text, "
+                            f"skipping to chapter {next_num}[/yellow]"
+                        )
+                        print_fn(
+                            f"\n[bold cyan]📖 Chapter {next_num}/{total_chapters}[/bold cyan]"
+                        )
+                        _speak_chapter(next_text)
+                        break
+                else:
+                    print_fn(
+                        f"\n[yellow]⏭ Chapter {ch_num}/{total_chapters} has no text "
+                        f"(no subsequent chapter with text found)[/yellow]"
+                    )
             return 0
 
         text = get_text(args, stdin, run=run)

@@ -10,6 +10,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 - Python 3.14+
 - piper-tts (dependency in pyproject.toml, run via `uv run reed`)
 - pypdf (PDF text extraction)
+- stdlib `zipfile` + `xml.etree` (EPUB reading — no external dependency)
 - macOS `afplay` for audio playback, `pbpaste` for clipboard access
 - Linux: `paplay`/`aplay`/`ffplay` for audio, `wl-paste`/`xclip`/`xsel` for clipboard
 - Windows: `powershell`/`ffplay` for audio, `powershell Get-Clipboard` for clipboard
@@ -24,6 +25,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 
 - Run: `reed 'text'`
 - Read PDF: `reed -f doc.pdf` or `reed -f doc.pdf --pages 1,3-5`
+- Read EPUB: `reed -f book.epub` or `reed -f book.epub --pages 1,3-5`
 - Interactive mode: `reed` (launches automatically when no input provided)
 - List voices: `reed voices`
 - Download voice: `reed download en_US-amy-medium`

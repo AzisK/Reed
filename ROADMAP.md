@@ -37,15 +37,17 @@ Currently `speak_text()` blocks on `subprocess.run()` for playback. All interact
 
 ## Phase 2 — File Format Support
 
-### 2.1 EPUB File Reading
+### 2.1 EPUB File Reading ✅
 **Effort:** Medium · **Priority:** High
 **Dependencies:** None
+**Status:** Done
 
-- Add `ebooklib` (or `epub2txt`) as an optional dependency in `pyproject.toml`
-- Create `_iter_epub_chapters()` yielding `(chapter_number, total_chapters, text)` — mirror the existing `_iter_pdf_pages()` pattern
-- Wire into `get_text()` / `main()` with `.epub` suffix detection alongside the existing `.pdf` path
-- Support `--pages` reinterpreted as `--chapters` for EPUBs (or add a `--chapters` flag)
-- Strip HTML tags from EPUB XHTML content (use `html.parser` from stdlib)
+- ✅ Create `_iter_epub_chapters()` yielding `(chapter_number, total_chapters, text)` — mirrors `_iter_pdf_pages()`
+- ✅ Wire into `main()` with `.epub` suffix detection alongside the existing `.pdf` path
+- ✅ `--pages` flag selects chapters for EPUBs
+- ✅ Strip HTML tags from EPUB XHTML content (stdlib `html.parser`)
+- ✅ Navigation documents filtered out via spine ordering
+- ✅ Zero external dependencies — uses stdlib `zipfile` + `xml.etree.ElementTree`
 
 ---
 
@@ -119,7 +121,7 @@ No Lithuanian piper voice model exists yet — this requires training one from s
 | 1.1 | Command autocomplete | Small | — |
 | 1.2 | Non-blocking playback controller | Medium | — |
 | 1.3 | Pause / play / stop commands | Small | 1.2 |
-| 2.1 | EPUB reading | Medium | — |
+| 2.1 | ✅ EPUB reading | Medium | — |
 | 3.1 | Save & resume position | Medium | 1.2, 2.1 |
 | 4.1 | Streaming audio | Large | 1.2 |
 | 5.1 | Lithuanian voice model training | Large | — |

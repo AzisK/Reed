@@ -713,13 +713,348 @@ class TestIterPdfPages:
         with pytest.raises(ReedError, match="Invalid page selection"):
             list(_iter_pdf_pages(Path("book.pdf"), "1,a"))
 
-    def test_pages_flag_with_non_pdf_file_raises(self):
+    def test_pages_flag_with_non_pdf_epub_file_raises(self):
         from reed import ReedError, get_text
 
         txt = io.StringIO("file content")
         args = _make_args(file="notes.txt", pages="1")
-        with pytest.raises(ReedError, match="only be used with PDF files"):
+        with pytest.raises(ReedError, match="only be used with PDF or EPUB files"):
             get_text(args, stdin=txt)
+
+
+# ─── _strip_html tests ───────────────────────────────────────────────
+
+
+class TestStripHtml:
+    def test_strips_basic_tags(self):
+        from reed import _strip_html
+
+        assert _strip_html(b"<p>Hello <b>world</b></p>") == "Hello world"
+
+    def test_preserves_paragraph_breaks(self):
+        from reed import _strip_html
+
+        result = _strip_html(b"<p>First</p><p>Second</p>")
+        assert result == "First\nSecond"
+
+    def test_empty_input(self):
+        from reed import _strip_html
+
+        assert _strip_html(b"") == ""
+
+    def test_plain_text_passthrough(self):
+        from reed import _strip_html
+
+        assert _strip_html(b"no tags here") == "no tags here"
+
+    def test_handles_entities(self):
+        from reed import _strip_html
+
+        result = _strip_html(b"<p>A &amp; B</p>")
+        assert "A & B" in result
+
+    def test_block_elements_add_breaks(self):
+        from reed import _strip_html
+
+        result = _strip_html(b"<div>One</div><div>Two</div>")
+        assert result == "One\nTwo"
+
+    def test_br_adds_break(self):
+        from reed import _strip_html
+
+        result = _strip_html(b"Line one<br/>Line two")
+        assert result == "Line one\nLine two"
+
+    def test_headings_add_breaks(self):
+        from reed import _strip_html
+
+        result = _strip_html(b"<h1>Title</h1><p>Body text</p>")
+        assert result == "Title\nBody text"
+
+
+# ─── _split_paragraphs tests ─────────────────────────────────────────
+
+
+class TestSplitParagraphs:
+    def test_splits_on_blank_lines(self):
+        from reed import _split_paragraphs
+
+        result = _split_paragraphs("First paragraph.\n\nSecond paragraph.")
+        assert result == ["First paragraph.", "Second paragraph."]
+
+    def test_single_paragraph(self):
+        from reed import _split_paragraphs
+
+        result = _split_paragraphs("Just one line.")
+        assert result == ["Just one line."]
+
+    def test_each_line_separate(self):
+        from reed import _split_paragraphs
+
+        result = _split_paragraphs("Line one\nLine two\n\nLine three")
+        assert result == ["Line one", "Line two", "Line three"]
+
+    def test_empty_string(self):
+        from reed import _split_paragraphs
+
+        assert _split_paragraphs("") == []
+
+    def test_only_whitespace(self):
+        from reed import _split_paragraphs
+
+        assert _split_paragraphs("  \n  \n  ") == []
+
+
+# ─── _iter_epub_chapters tests ───────────────────────────────────────
+
+
+class TestIterEpubChapters:
+    def _fake_spine(self, html_list):
+        """Create a fake spine: list of (href, FakeZf) from HTML byte strings."""
+
+        class FakeZf:
+            def __init__(self, data_map):
+                self._data = data_map
+
+            def read(self, href):
+                return self._data[href]
+
+        data = {f"ch{i}.xhtml": html for i, html in enumerate(html_list)}
+        zf = FakeZf(data)
+        return [(href, zf) for href in data]
+
+    def test_reads_all_chapters(self, monkeypatch):
+        from reed import _iter_epub_chapters
+
+        spine = self._fake_spine([b"<p>Chapter one</p>", b"<p>Chapter two</p>"])
+        monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
+
+        result = list(_iter_epub_chapters(Path("book.epub"), None))
+        assert len(result) == 2
+        assert result[0] == (1, 2, "Chapter one")
+        assert result[1] == (2, 2, "Chapter two")
+
+    def test_selected_chapters(self, monkeypatch):
+        from reed import _iter_epub_chapters
+
+        spine = self._fake_spine(
+            [b"<p>Ch one</p>", b"<p>Ch two</p>", b"<p>Ch three</p>", b"<p>Ch four</p>"]
+        )
+        monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
+
+        result = list(_iter_epub_chapters(Path("book.epub"), "2,4"))
+        assert result == [(2, 4, "Ch two"), (4, 4, "Ch four")]
+
+    def test_chapter_out_of_range_raises(self, monkeypatch):
+        from reed import ReedError, _iter_epub_chapters
+
+        spine = self._fake_spine([b"<p>Only one</p>"])
+        monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
+
+        with pytest.raises(ReedError, match="Chapter 5 is out of range"):
+            list(_iter_epub_chapters(Path("book.epub"), "5"))
+
+    def test_yields_empty_chapters(self, monkeypatch):
+        from reed import _iter_epub_chapters
+
+        spine = self._fake_spine([b"<p>Has text</p>", b"  ", b"<p>Also text</p>"])
+        monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
+
+        result = list(_iter_epub_chapters(Path("book.epub"), None))
+        assert len(result) == 3
+        assert result[0] == (1, 3, "Has text")
+        assert result[1] == (2, 3, "")
+        assert result[2] == (3, 3, "Also text")
+
+    def test_empty_text_still_yielded(self, monkeypatch):
+        from reed import _iter_epub_chapters
+
+        spine = self._fake_spine([b"  "])
+        monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
+
+        result = list(_iter_epub_chapters(Path("book.epub"), None))
+        assert result == [(1, 1, "")]
+
+
+# ─── main EPUB integration tests ────────────────────────────────────
+
+
+class TestMainEpub:
+    def _capture_main(self, **kwargs):
+        from rich.console import Console as RichConsole
+
+        cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
+        code = _reed.main(print_fn=cap_console.print, **kwargs)
+        output = cap_console.file.getvalue()
+        return code, output
+
+    def _fake_spine(self, html_list):
+        """Create a fake spine: list of (href, FakeZf) from HTML byte strings."""
+
+        class FakeZf:
+            def __init__(self, data_map):
+                self._data = data_map
+
+            def read(self, href):
+                return self._data[href]
+
+        data = {f"ch{i}.xhtml": html for i, html in enumerate(html_list)}
+        zf = FakeZf(data)
+        return [(href, zf) for href in data]
+
+    def test_epub_file_reads_chapters(self, monkeypatch, tmp_path):
+        epub_file = tmp_path / "book.epub"
+        epub_file.touch()
+
+        spoken: list[str] = []
+
+        def fake_speak(text, config, *, run, print_fn, play_cmd):
+            spoken.append(text)
+
+        monkeypatch.setattr("reed.speak_text", fake_speak)
+        monkeypatch.setattr(
+            "reed._load_epub_spine",
+            lambda p: self._fake_spine(
+                [b"<p>Chapter one text</p>", b"<p>Chapter two text</p>"]
+            ),
+        )
+
+        code, output = self._capture_main(
+            argv=["-f", str(epub_file), "-m", __file__],
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert "Chapter 1/2" in output
+        assert "Chapter one text" in spoken
+        assert "Chapter two text" in spoken
+
+    def test_epub_skips_to_next_chapter_with_text(self, monkeypatch, tmp_path):
+        epub_file = tmp_path / "book.epub"
+        epub_file.touch()
+
+        spoken: list[str] = []
+
+        def fake_speak(text, config, *, run, print_fn, play_cmd):
+            spoken.append(text)
+
+        monkeypatch.setattr("reed.speak_text", fake_speak)
+        monkeypatch.setattr(
+            "reed._load_epub_spine",
+            lambda p: self._fake_spine([b"  ", b"<p>Real content</p>", b"  "]),
+        )
+
+        code, output = self._capture_main(
+            argv=["-f", str(epub_file), "--pages", "1", "-m", __file__],
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert "has no text, skipping to chapter 2" in output
+        assert "Chapter 2/3" in output
+        assert spoken == ["Real content"]
+
+    def test_epub_skip_no_subsequent_text(self, monkeypatch, tmp_path):
+        epub_file = tmp_path / "book.epub"
+        epub_file.touch()
+
+        spoken: list[str] = []
+
+        def fake_speak(text, config, *, run, print_fn, play_cmd):
+            spoken.append(text)
+
+        monkeypatch.setattr("reed.speak_text", fake_speak)
+        monkeypatch.setattr(
+            "reed._load_epub_spine",
+            lambda p: self._fake_spine([b"<p>Content</p>", b"  "]),
+        )
+
+        code, output = self._capture_main(
+            argv=["-f", str(epub_file), "--pages", "2", "-m", __file__],
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert "no subsequent chapter with text found" in output
+        assert spoken == []
+
+    def test_epub_all_chapters_skips_empty(self, monkeypatch, tmp_path):
+        epub_file = tmp_path / "book.epub"
+        epub_file.touch()
+
+        spoken: list[str] = []
+
+        def fake_speak(text, config, *, run, print_fn, play_cmd):
+            spoken.append(text)
+
+        monkeypatch.setattr("reed.speak_text", fake_speak)
+        monkeypatch.setattr(
+            "reed._load_epub_spine",
+            lambda p: self._fake_spine([b"  ", b"<p>Real content</p>", b"  "]),
+        )
+
+        code, output = self._capture_main(
+            argv=["-f", str(epub_file), "-m", __file__],
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert "Chapter 2/3" in output
+        assert spoken == ["Real content"]
+
+    def test_epub_speaks_paragraph_by_paragraph(self, monkeypatch, tmp_path):
+        epub_file = tmp_path / "book.epub"
+        epub_file.touch()
+
+        spoken: list[str] = []
+
+        def fake_speak(text, config, *, run, print_fn, play_cmd):
+            spoken.append(text)
+
+        monkeypatch.setattr("reed.speak_text", fake_speak)
+        monkeypatch.setattr(
+            "reed._load_epub_spine",
+            lambda p: self._fake_spine(
+                [b"<p>First paragraph.</p><p>Second paragraph.</p>"]
+            ),
+        )
+
+        code, output = self._capture_main(
+            argv=["-f", str(epub_file), "-m", __file__],
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert spoken == ["First paragraph.", "Second paragraph."]
+
+    def test_pages_flag_works_with_epub(self, monkeypatch, tmp_path):
+        epub_file = tmp_path / "book.epub"
+        epub_file.touch()
+
+        spoken: list[str] = []
+
+        def fake_speak(text, config, *, run, print_fn, play_cmd):
+            spoken.append(text)
+
+        monkeypatch.setattr("reed.speak_text", fake_speak)
+        monkeypatch.setattr(
+            "reed._load_epub_spine",
+            lambda p: self._fake_spine(
+                [
+                    b"<p>First chapter</p>",
+                    b"<p>Second chapter</p>",
+                    b"<p>Third chapter</p>",
+                ]
+            ),
+        )
+
+        code, output = self._capture_main(
+            argv=["-f", str(epub_file), "--pages", "1,3", "-m", __file__],
+            run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
+            stdin=io.StringIO(""),
+        )
+        assert code == 0
+        assert spoken == ["First chapter", "Third chapter"]
 
 
 # ─── main error path tests ───────────────────────────────────────────
@@ -770,7 +1105,7 @@ class TestMainErrors:
             stdin=io.StringIO(""),
         )
         assert code == 1
-        assert "--pages requires --file <PDF>" in output
+        assert "--pages requires --file" in output
 
 
 # ─── _data_dir tests ─────────────────────────────────────────────────
