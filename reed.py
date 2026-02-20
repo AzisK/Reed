@@ -161,7 +161,10 @@ class PlaybackController:
             if self._state != PlaybackState.PLAYING or self._current_proc is None:
                 return False
             if os.name == "posix":
-                self._current_proc.send_signal(signal.SIGSTOP)
+                sigstop = getattr(signal, "SIGSTOP", None)
+                if sigstop is None:
+                    return False
+                self._current_proc.send_signal(sigstop)
                 self._state = PlaybackState.PAUSED
                 self._print_fn("\n[bold yellow]⏸ Paused[/bold yellow]")
                 return True
@@ -177,7 +180,10 @@ class PlaybackController:
             if self._state != PlaybackState.PAUSED or self._current_proc is None:
                 return False
             if os.name == "posix":
-                self._current_proc.send_signal(signal.SIGCONT)
+                sigcont = getattr(signal, "SIGCONT", None)
+                if sigcont is None:
+                    return False
+                self._current_proc.send_signal(sigcont)
                 self._state = PlaybackState.PLAYING
                 self._print_fn("\n[bold green]▶ Playing...[/bold green]")
                 return True

@@ -1441,6 +1441,25 @@ class TestPlaybackController:
         assert result is False
         assert controller._state == PlaybackState.PLAYING
 
+    def test_pause_on_posix_without_sigstop_returns_false(self, monkeypatch):
+        from reed import PlaybackController, PlaybackState, ReedConfig
+
+        fake_proc = types.SimpleNamespace(
+            send_signal=lambda sig: None, poll=lambda: None
+        )
+        controller = PlaybackController(print_fn=lambda *a, **k: None)
+        controller._state = PlaybackState.PLAYING
+        controller._current_proc = fake_proc
+        controller._config = ReedConfig(model=Path("test.onnx"))
+
+        monkeypatch.setattr("reed.os.name", "posix")
+        monkeypatch.delattr(_reed.signal, "SIGSTOP", raising=False)
+
+        result = controller.pause()
+
+        assert result is False
+        assert controller._state == PlaybackState.PLAYING
+
     def test_resume_on_posix_sends_sigcont(self, monkeypatch):
         from reed import PlaybackController, PlaybackState, ReedConfig
 
@@ -1477,6 +1496,25 @@ class TestPlaybackController:
         controller._config = ReedConfig(model=Path("test.onnx"))
 
         monkeypatch.setattr("reed.os.name", "nt")
+
+        result = controller.resume()
+
+        assert result is False
+        assert controller._state == PlaybackState.PAUSED
+
+    def test_resume_on_posix_without_sigcont_returns_false(self, monkeypatch):
+        from reed import PlaybackController, PlaybackState, ReedConfig
+
+        fake_proc = types.SimpleNamespace(
+            send_signal=lambda sig: None, poll=lambda: None
+        )
+        controller = PlaybackController(print_fn=lambda *a, **k: None)
+        controller._state = PlaybackState.PAUSED
+        controller._current_proc = fake_proc
+        controller._config = ReedConfig(model=Path("test.onnx"))
+
+        monkeypatch.setattr("reed.os.name", "posix")
+        monkeypatch.delattr(_reed.signal, "SIGCONT", raising=False)
 
         result = controller.resume()
 
