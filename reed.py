@@ -300,8 +300,9 @@ QUIT_WORDS = ("/quit", "/exit")
 BANNER_MARKUP = """🔊 [bold]reed[/bold] - Interactive Mode
 ──────────────────────────────────────────────────────────────
 [dim]Type or paste text and press Enter to hear it.[/dim]
+[dim]Drag and drop PDF/EPUB files or type [bold]/load <path>[/bold] to read files.[/dim]
 [dim]Type [bold]/quit[/bold] or [bold]/exit[/bold] to stop. Ctrl-D for EOF.[/dim]
-[dim]Available commands: [bold]/help[/bold], [bold]/clear[/bold], [bold]/replay[/bold][/dim]"""
+[dim]Available commands: [bold]/help[/bold], [bold]/clear[/bold], [bold]/replay[/bold], [bold]/load[/bold][/dim]"""
 
 COMMANDS = {
     "/quit": "Exit interactive mode",
@@ -309,6 +310,7 @@ COMMANDS = {
     "/help": "Show this help",
     "/clear": "Clear screen",
     "/replay": "Replay last text",
+    "/load <path>": "Load and read a PDF or EPUB file",
 }
 
 
@@ -768,6 +770,7 @@ def interactive_loop(
     help_cmd = "/help"
     clear_cmd = "/clear"
     replay_cmd = "/replay"
+    load_cmd = "/load"
 
     print_banner(print_fn)
 
@@ -776,6 +779,52 @@ def interactive_loop(
         prompt_fn = session.prompt
 
     last_text = ""
+
+    def _path_candidates(path_text: str) -> list[str]:
+        stripped = path_text.strip("\"'")
+        normalized = stripped.replace("\\ ", " ")
+        if normalized == stripped:
+            return [normalized]
+        return [normalized, stripped]
+
+    def _read_file_path(file_path_str: str) -> None:
+        """Load and read a PDF or EPUB file."""
+        file_path: Optional[Path] = None
+        for candidate in _path_candidates(file_path_str):
+            candidate_path = Path(candidate)
+            if candidate_path.exists():
+                file_path = candidate_path
+                break
+
+        if file_path is None:
+            print_fn(f"[bold red]File not found:[/bold red] {file_path_str}\n")
+            return
+
+        suffix = file_path.suffix.lower()
+        if suffix not in (".pdf", ".epub"):
+            print_fn(
+                f"[bold red]Unsupported file type:[/bold red] {suffix} (use .pdf or .epub)\n"
+            )
+            return
+
+        try:
+            if suffix == ".pdf":
+                for page_num, total, page_text in _iter_pdf_pages(file_path, None):
+                    print_fn(f"\n[bold cyan]📄 Page {page_num}/{total}[/bold cyan]")
+                    speak_line(page_text)
+                    # Wait for current speech to complete before next page
+                    if controller is not None:
+                        controller.wait()
+            elif suffix == ".epub":
+                for ch_num, total, ch_text in _iter_epub_chapters(file_path, None):
+                    print_fn(f"\n[bold cyan]📖 Chapter {ch_num}/{total}[/bold cyan]")
+                    speak_line(ch_text)
+                    # Wait for current speech to complete before next chapter
+                    if controller is not None:
+                        controller.wait()
+        except ReedError as e:
+            print_error(str(e), print_fn)
+            print_fn("")
 
     try:
         while True:
@@ -813,6 +862,32 @@ def interactive_loop(
                     print_fn("")
                 else:
                     print_fn("[bold yellow]No text to replay.[/bold yellow]\n")
+                continue
+            elif cmd.startswith(load_cmd + " "):
+                # Handle /load <path>
+                parts = text.split(maxsplit=1)
+                if len(parts) < 2:
+                    print_fn(
+                        f"[bold yellow]Usage:[/bold yellow] {parts[0]} <file-path>\n"
+                    )
+                    continue
+                file_path_str = parts[1]
+                _read_file_path(file_path_str)
+                continue
+
+            # Check if input is a file path (drag-and-drop or pasted)
+            def _try_detect_file_path(input_text: str) -> Optional[str]:
+                """Try to detect if input is a file path. Returns cleaned path or None."""
+                for candidate in _path_candidates(input_text):
+                    if not candidate.lower().endswith((".pdf", ".epub")):
+                        continue
+                    if Path(candidate).exists():
+                        return candidate
+                return None
+
+            detected_path = _try_detect_file_path(text)
+            if detected_path:
+                _read_file_path(detected_path)
                 continue
 
             lines = [ln.strip() for ln in text.splitlines() if ln.strip()]

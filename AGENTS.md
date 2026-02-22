@@ -33,6 +33,8 @@ Start here: Read `ARCHITECTURE.md` before implementing features that touch playb
 - Read PDF: `reed -f doc.pdf` or `reed -f doc.pdf --pages 1,3-5`
 - Read EPUB: `reed -f book.epub` or `reed -f book.epub --pages 1,3-5`
 - Interactive mode: `reed` (launches automatically when no input provided)
+  - Drag and drop PDF/EPUB files to read them aloud (fastest method)
+  - `/load <path>` — Load and read a PDF or EPUB file (useful in SSH/tmux)
 - List voices: `reed voices`
 - Download voice: `reed download en_US-amy-medium`
 - Typecheck: `mypy reed.py --ignore-missing-imports`
@@ -71,7 +73,9 @@ Start here: Read `ARCHITECTURE.md` before implementing features that touch playb
  - Use Rich library for terminal UI enhancements (colors, panels, spinners, tables)
  - Banner styled with rich markup in `BANNER_MARKUP` constant
  - Visual feedback includes spinner during TTS generation
- - Commands available in interactive mode: `/quit`, `/exit`, `/help`, `/clear`, `/replay`
+ - Commands available in interactive mode: `/quit`, `/exit`, `/help`, `/clear`, `/replay`, `/load`
  - Tab autocomplete available for commands
  - Include `print_fn` parameter for testability with dependency injection
  - Playback state: Future `/pause`, `/play`, `/stop` commands will wire to `PlaybackController` methods
+ - File loading: When reading multi-page PDFs or multi-chapter EPUBs, each page/chapter waits for the previous one to complete
+ - Drag-and-drop: Primary method for loading files; `/load` command is for remote terminals

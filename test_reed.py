@@ -221,6 +221,273 @@ class TestInteractiveLoop:
         assert result == 0
         assert any("reed" in str(item) for item in printed)
 
+    def test_load_command_with_valid_pdf(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        # Create a mock PDF file
+        pdf_path = tmp_path / "test.pdf"
+        pdf_path.write_text("%PDF-1.4")  # Minimal PDF header
+
+        spoken: list[str] = []
+        printed: list[object] = []
+
+        def mock_iter_pdf_pages(path, selection):
+            yield (1, 1, "Test PDF content")
+
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: printed.append(args[0] if args else None),
+            prompt_fn=_make_prompt_fn(["/load " + str(pdf_path), "/quit"]),
+        )
+        assert result == 0
+        assert "Test PDF content" in spoken
+
+    def test_pdf_command_alias(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        pdf_path = tmp_path / "test.pdf"
+        pdf_path.write_text("%PDF-1.4")
+
+        spoken: list[str] = []
+
+        def mock_iter_pdf_pages(path, selection):
+            yield (1, 1, "Test PDF content")
+
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn(["/load " + str(pdf_path), "/quit"]),
+        )
+        assert result == 0
+        assert "Test PDF content" in spoken
+
+    def test_load_command_file_not_found(self, tmp_path):
+        from reed import interactive_loop
+
+        non_existent = tmp_path / "missing.pdf"
+        printed: list[object] = []
+
+        result = interactive_loop(
+            speak_line=lambda t: None,
+            print_fn=lambda *args, **kwargs: printed.append(args[0] if args else None),
+            prompt_fn=_make_prompt_fn(["/load " + str(non_existent), "/quit"]),
+        )
+        assert result == 0
+        assert any("File not found" in str(item) for item in printed)
+
+    def test_load_command_unsupported_type(self, tmp_path):
+        from reed import interactive_loop
+
+        txt_path = tmp_path / "test.txt"
+        txt_path.write_text("Some text")
+        printed: list[object] = []
+
+        result = interactive_loop(
+            speak_line=lambda t: None,
+            print_fn=lambda *args, **kwargs: printed.append(args[0] if args else None),
+            prompt_fn=_make_prompt_fn(["/load " + str(txt_path), "/quit"]),
+        )
+        assert result == 0
+        assert any("Unsupported file type" in str(item) for item in printed)
+
+    def test_load_command_windows_path_preserves_backslashes(self, monkeypatch):
+        from reed import interactive_loop
+
+        windows_pdf = r"C:\Users\runneradmin\book.pdf"
+        spoken: list[str] = []
+
+        class FakePath:
+            def __init__(self, raw: str):
+                self.raw = raw
+
+            def exists(self) -> bool:
+                return self.raw == windows_pdf
+
+            @property
+            def suffix(self) -> str:
+                return ".pdf" if self.raw.lower().endswith(".pdf") else ""
+
+        def mock_iter_pdf_pages(path, selection):
+            assert path.raw == windows_pdf
+            yield (1, 1, "Windows path PDF content")
+
+        monkeypatch.setattr(_reed, "Path", FakePath)
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([f"/load {windows_pdf}", "/quit"]),
+        )
+        assert result == 0
+        assert "Windows path PDF content" in spoken
+
+    def test_drag_drop_windows_path_with_escaped_spaces(self, monkeypatch):
+        from reed import interactive_loop
+
+        windows_pdf = r"C:\Users\runneradmin\My Book.pdf"
+        escaped_input = r"C:\Users\runneradmin\My\ Book.pdf"
+        spoken: list[str] = []
+
+        class FakePath:
+            def __init__(self, raw: str):
+                self.raw = raw
+
+            def exists(self) -> bool:
+                return self.raw == windows_pdf
+
+            @property
+            def suffix(self) -> str:
+                return ".pdf" if self.raw.lower().endswith(".pdf") else ""
+
+        def mock_iter_pdf_pages(path, selection):
+            assert path.raw == windows_pdf
+            yield (1, 1, "Windows escaped-space PDF content")
+
+        monkeypatch.setattr(_reed, "Path", FakePath)
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([escaped_input, "/quit"]),
+        )
+        assert result == 0
+        assert "Windows escaped-space PDF content" in spoken
+
+    def test_drag_drop_pdf_file_path(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        pdf_path = tmp_path / "book.pdf"
+        pdf_path.write_text("%PDF-1.4")
+
+        spoken: list[str] = []
+
+        def mock_iter_pdf_pages(path, selection):
+            yield (1, 1, "Dragged PDF content")
+
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        # Simulate drag-drop by passing the file path as input
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([str(pdf_path), "/quit"]),
+        )
+        assert result == 0
+        assert "Dragged PDF content" in spoken
+
+    def test_drag_drop_pdf_with_quotes(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        pdf_path = tmp_path / "book.pdf"
+        pdf_path.write_text("%PDF-1.4")
+
+        spoken: list[str] = []
+
+        def mock_iter_pdf_pages(path, selection):
+            yield (1, 1, "Quoted PDF content")
+
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        # Simulate drag-drop with quotes (common in terminals)
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn(['"' + str(pdf_path) + '"', "/quit"]),
+        )
+        assert result == 0
+        assert "Quoted PDF content" in spoken
+
+    def test_drag_drop_epub_file(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        epub_path = tmp_path / "book.epub"
+        epub_path.write_text("EPUB content placeholder")
+
+        spoken: list[str] = []
+
+        def mock_iter_epub_chapters(path, selection):
+            yield (1, 1, "EPUB chapter content")
+
+        monkeypatch.setattr(_reed, "_iter_epub_chapters", mock_iter_epub_chapters)
+
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([str(epub_path), "/quit"]),
+        )
+        assert result == 0
+        assert "EPUB chapter content" in spoken
+
+    def test_non_existent_file_path_not_treated_as_file(self, tmp_path):
+        from reed import interactive_loop
+
+        # A path that ends with .pdf but doesn't exist should be treated as text
+        fake_path = tmp_path / "missing.pdf"
+        spoken: list[str] = []
+
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([str(fake_path), "/quit"]),
+        )
+        assert result == 0
+        # Should try to speak it as text since file doesn't exist
+        assert len(spoken) == 1
+
+    def test_drag_drop_pdf_with_spaces_in_path(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        # Create a PDF with spaces in the filename
+        pdf_path = tmp_path / "My Document.pdf"
+        pdf_path.write_text("%PDF-1.4")
+
+        spoken: list[str] = []
+
+        def mock_iter_pdf_pages(path, selection):
+            yield (1, 1, "PDF with spaces in path")
+
+        monkeypatch.setattr(_reed, "_iter_pdf_pages", mock_iter_pdf_pages)
+
+        # Simulate pasted path with backslash escapes for spaces
+        escaped_path = str(pdf_path).replace(" ", "\\ ")
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([escaped_path, "/quit"]),
+        )
+        assert result == 0
+        assert "PDF with spaces in path" in spoken
+
+    def test_drag_drop_epub_with_spaces_in_path(self, tmp_path, monkeypatch):
+        from reed import interactive_loop
+
+        # Create an EPUB with spaces in the filename
+        epub_path = tmp_path / "My Book.epub"
+        epub_path.write_text("EPUB content")
+
+        spoken: list[str] = []
+
+        def mock_iter_epub_chapters(path, selection):
+            yield (1, 1, "EPUB with spaces in path")
+
+        monkeypatch.setattr(_reed, "_iter_epub_chapters", mock_iter_epub_chapters)
+
+        # Simulate pasted path with backslash escapes for spaces
+        escaped_path = str(epub_path).replace(" ", "\\ ")
+        result = interactive_loop(
+            speak_line=lambda t: spoken.append(t),
+            print_fn=lambda *args, **kwargs: None,
+            prompt_fn=_make_prompt_fn([escaped_path, "/quit"]),
+        )
+        assert result == 0
+        assert "EPUB with spaces in path" in spoken
+
 
 # ─── build_piper_cmd tests ────────────────────────────────────────────
 
