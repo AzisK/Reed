@@ -206,7 +206,7 @@ class PlaybackController:
             try:
                 self._current_proc.terminate()
                 self._current_proc.wait(timeout=2)
-            except (subprocess.TimeoutExpired, ProcessLookupError):
+            except subprocess.TimeoutExpired, ProcessLookupError:
                 try:
                     self._current_proc.kill()
                 except ProcessLookupError:
