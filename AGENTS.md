@@ -17,6 +17,7 @@ This is `reed`, a convenient CLI for text-to-speech using piper-tts.
 - Rich (terminal UI library for styled output)
 - Voice models stored in `~/.local/share/reed/` (Linux/macOS) or `%LOCALAPPDATA%\reed\` (Windows)
 - `prompt_toolkit` (interactive prompt with history and autocomplete)
+- `pathvalidate` (required by piper-tts dependency chain — do NOT remove)
 
 ## Structure
 
@@ -67,6 +68,8 @@ Start here: Read `ARCHITECTURE.md` before implementing features that touch playb
 - Thread safety: Use `threading.Lock` for shared state in `PlaybackController`
 - Non-blocking playback: Interactive mode uses `PlaybackController`; file/output modes use blocking `subprocess.run()`
 - Platform checks: Use `os.name == "posix"` for Unix-specific behavior (SIGSTOP/SIGCONT)
+- Python 3.14+ syntax is allowed — e.g. `except A, B:` without parentheses (PEP 758), and other 3.14 features. Do not flag these as errors.
+- Use `X | None` instead of `Optional[X]` — project uses modern union syntax throughout
 
  ## UI Development
 

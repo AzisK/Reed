@@ -40,6 +40,33 @@ def _make_config(**overrides):
     return ReedConfig(**defaults)
 
 
+def _capture_main(**kwargs):
+    from rich.console import Console as RichConsole
+
+    cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
+    code = _reed.main(print_fn=cap_console.print, **kwargs)
+    output = cap_console.file.getvalue()
+    return code, output
+
+
+def _fake_spine(html_list):
+    """Create a fake spine: list of (href, FakeZf) from HTML byte strings."""
+
+    class FakeZf:
+        def __init__(self, data_map):
+            self._data = data_map
+
+        def read(self, href):
+            return self._data[href]
+
+        def close(self):
+            pass
+
+    data = {f"ch{i}.xhtml": html for i, html in enumerate(html_list)}
+    zf = FakeZf(data)
+    return [(href, zf) for href in data]
+
+
 def _make_prompt_fn(lines: list[str]):
     """Create a prompt_fn that yields lines then raises EOFError."""
     it = iter(lines)
@@ -590,9 +617,9 @@ class TestSpeakText:
                 return types.SimpleNamespace(returncode=0, stderr="")
             return types.SimpleNamespace(returncode=1, stderr="")
 
-        args = _make_args()
+        config = _make_config()
         with pytest.raises(ReedError, match="playback error"):
-            speak_text("hi", args, run=fake_run)
+            speak_text("hi", config, run=fake_run)
 
 
 # ─── main integration tests ──────────────────────────────────────────
@@ -1081,24 +1108,10 @@ class TestSplitParagraphs:
 
 
 class TestIterEpubChapters:
-    def _fake_spine(self, html_list):
-        """Create a fake spine: list of (href, FakeZf) from HTML byte strings."""
-
-        class FakeZf:
-            def __init__(self, data_map):
-                self._data = data_map
-
-            def read(self, href):
-                return self._data[href]
-
-        data = {f"ch{i}.xhtml": html for i, html in enumerate(html_list)}
-        zf = FakeZf(data)
-        return [(href, zf) for href in data]
-
     def test_reads_all_chapters(self, monkeypatch):
         from reed import _iter_epub_chapters
 
-        spine = self._fake_spine([b"<p>Chapter one</p>", b"<p>Chapter two</p>"])
+        spine = _fake_spine([b"<p>Chapter one</p>", b"<p>Chapter two</p>"])
         monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
 
         result = list(_iter_epub_chapters(Path("book.epub"), None))
@@ -1109,7 +1122,7 @@ class TestIterEpubChapters:
     def test_selected_chapters(self, monkeypatch):
         from reed import _iter_epub_chapters
 
-        spine = self._fake_spine(
+        spine = _fake_spine(
             [b"<p>Ch one</p>", b"<p>Ch two</p>", b"<p>Ch three</p>", b"<p>Ch four</p>"]
         )
         monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
@@ -1120,7 +1133,7 @@ class TestIterEpubChapters:
     def test_chapter_out_of_range_raises(self, monkeypatch):
         from reed import ReedError, _iter_epub_chapters
 
-        spine = self._fake_spine([b"<p>Only one</p>"])
+        spine = _fake_spine([b"<p>Only one</p>"])
         monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
 
         with pytest.raises(ReedError, match="Chapter 5 is out of range"):
@@ -1129,7 +1142,7 @@ class TestIterEpubChapters:
     def test_yields_empty_chapters(self, monkeypatch):
         from reed import _iter_epub_chapters
 
-        spine = self._fake_spine([b"<p>Has text</p>", b"  ", b"<p>Also text</p>"])
+        spine = _fake_spine([b"<p>Has text</p>", b"  ", b"<p>Also text</p>"])
         monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
 
         result = list(_iter_epub_chapters(Path("book.epub"), None))
@@ -1141,7 +1154,7 @@ class TestIterEpubChapters:
     def test_empty_text_still_yielded(self, monkeypatch):
         from reed import _iter_epub_chapters
 
-        spine = self._fake_spine([b"  "])
+        spine = _fake_spine([b"  "])
         monkeypatch.setattr("reed._load_epub_spine", lambda p: spine)
 
         result = list(_iter_epub_chapters(Path("book.epub"), None))
@@ -1152,28 +1165,6 @@ class TestIterEpubChapters:
 
 
 class TestMainEpub:
-    def _capture_main(self, **kwargs):
-        from rich.console import Console as RichConsole
-
-        cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
-        code = _reed.main(print_fn=cap_console.print, **kwargs)
-        output = cap_console.file.getvalue()
-        return code, output
-
-    def _fake_spine(self, html_list):
-        """Create a fake spine: list of (href, FakeZf) from HTML byte strings."""
-
-        class FakeZf:
-            def __init__(self, data_map):
-                self._data = data_map
-
-            def read(self, href):
-                return self._data[href]
-
-        data = {f"ch{i}.xhtml": html for i, html in enumerate(html_list)}
-        zf = FakeZf(data)
-        return [(href, zf) for href in data]
-
     def test_epub_file_reads_chapters(self, monkeypatch, tmp_path):
         epub_file = tmp_path / "book.epub"
         epub_file.touch()
@@ -1186,12 +1177,12 @@ class TestMainEpub:
         monkeypatch.setattr("reed.speak_text", fake_speak)
         monkeypatch.setattr(
             "reed._load_epub_spine",
-            lambda p: self._fake_spine(
+            lambda p: _fake_spine(
                 [b"<p>Chapter one text</p>", b"<p>Chapter two text</p>"]
             ),
         )
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-f", str(epub_file), "-m", __file__],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1213,10 +1204,10 @@ class TestMainEpub:
         monkeypatch.setattr("reed.speak_text", fake_speak)
         monkeypatch.setattr(
             "reed._load_epub_spine",
-            lambda p: self._fake_spine([b"  ", b"<p>Real content</p>", b"  "]),
+            lambda p: _fake_spine([b"  ", b"<p>Real content</p>", b"  "]),
         )
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-f", str(epub_file), "--pages", "1", "-m", __file__],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1238,10 +1229,10 @@ class TestMainEpub:
         monkeypatch.setattr("reed.speak_text", fake_speak)
         monkeypatch.setattr(
             "reed._load_epub_spine",
-            lambda p: self._fake_spine([b"<p>Content</p>", b"  "]),
+            lambda p: _fake_spine([b"<p>Content</p>", b"  "]),
         )
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-f", str(epub_file), "--pages", "2", "-m", __file__],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1262,10 +1253,10 @@ class TestMainEpub:
         monkeypatch.setattr("reed.speak_text", fake_speak)
         monkeypatch.setattr(
             "reed._load_epub_spine",
-            lambda p: self._fake_spine([b"  ", b"<p>Real content</p>", b"  "]),
+            lambda p: _fake_spine([b"  ", b"<p>Real content</p>", b"  "]),
         )
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-f", str(epub_file), "-m", __file__],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1286,12 +1277,10 @@ class TestMainEpub:
         monkeypatch.setattr("reed.speak_text", fake_speak)
         monkeypatch.setattr(
             "reed._load_epub_spine",
-            lambda p: self._fake_spine(
-                [b"<p>First paragraph.</p><p>Second paragraph.</p>"]
-            ),
+            lambda p: _fake_spine([b"<p>First paragraph.</p><p>Second paragraph.</p>"]),
         )
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-f", str(epub_file), "-m", __file__],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1311,7 +1300,7 @@ class TestMainEpub:
         monkeypatch.setattr("reed.speak_text", fake_speak)
         monkeypatch.setattr(
             "reed._load_epub_spine",
-            lambda p: self._fake_spine(
+            lambda p: _fake_spine(
                 [
                     b"<p>First chapter</p>",
                     b"<p>Second chapter</p>",
@@ -1320,7 +1309,7 @@ class TestMainEpub:
             ),
         )
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-f", str(epub_file), "--pages", "1,3", "-m", __file__],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1333,16 +1322,8 @@ class TestMainEpub:
 
 
 class TestMainErrors:
-    def _capture_main(self, **kwargs):
-        from rich.console import Console as RichConsole
-
-        cap_console = RichConsole(file=io.StringIO(), force_terminal=False)
-        code = _reed.main(print_fn=cap_console.print, **kwargs)
-        output = cap_console.file.getvalue()
-        return code, output
-
     def test_missing_model_returns_1(self):
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-m", "/nonexistent/model.onnx"],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO("some text"),
@@ -1358,7 +1339,7 @@ class TestMainErrors:
 
         monkeypatch.setattr("reed._default_play_cmd", no_player)
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=[],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),
@@ -1370,7 +1351,7 @@ class TestMainErrors:
         def failing_run(cmd, **kwargs):
             return types.SimpleNamespace(returncode=1, stderr="piper exploded")
 
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["-m", __file__],
             run=failing_run,
             stdin=io.StringIO("hello"),
@@ -1379,7 +1360,7 @@ class TestMainErrors:
         assert "piper exploded" in output
 
     def test_pages_without_file_returns_1(self):
-        code, output = self._capture_main(
+        code, output = _capture_main(
             argv=["--pages", "1"],
             run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""),
             stdin=io.StringIO(""),

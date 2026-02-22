@@ -17,9 +17,10 @@ import xml.etree.ElementTree as ET
 import zipfile
 from enum import Enum, auto
 from html.parser import HTMLParser
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterator, Optional, Sequence, TextIO
+from collections.abc import Callable, Iterator, Sequence
+from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
     from prompt_toolkit import PromptSession
@@ -61,15 +62,15 @@ class PlaybackController:
     """
 
     def __init__(self, print_fn: Callable[..., None] = console.print) -> None:
-        self._current_proc: Optional[subprocess.Popen] = None
-        self._piper_proc: Optional[subprocess.Popen] = None
-        self._playback_thread: Optional[threading.Thread] = None
+        self._current_proc: subprocess.Popen | None = None
+        self._piper_proc: subprocess.Popen | None = None
+        self._playback_thread: threading.Thread | None = None
         self._state = PlaybackState.IDLE
         self._current_text = ""
-        self._config: Optional[ReedConfig] = None
+        self._config: ReedConfig | None = None
         self._lock = threading.Lock()
         self._print_fn = print_fn
-        self._stop_requested = False
+        self._stop_event = threading.Event()
 
     def play(self, text: str, config: ReedConfig) -> None:
         """Start playback of text in a background thread.
@@ -82,7 +83,7 @@ class PlaybackController:
             self._current_text = text
             self._config = config
             self._state = PlaybackState.PLAYING
-            self._stop_requested = False
+            self._stop_event.clear()
             self._playback_thread = threading.Thread(
                 target=self._playback_worker, args=(text, config), daemon=True
             )
@@ -119,7 +120,7 @@ class PlaybackController:
                 input=text.encode("utf-8")
             )
 
-            if self._stop_requested or self._piper_proc.returncode != 0:
+            if self._stop_event.is_set() or self._piper_proc.returncode != 0:
                 self._print_fn("\n[bold red]✗ Piper error[/bold red]")
                 return
 
@@ -129,7 +130,7 @@ class PlaybackController:
             # Wait for playback to complete or be interrupted
             self._current_proc.wait()
 
-            if self._stop_requested:
+            if self._stop_event.is_set():
                 self._state = PlaybackState.STOPPED
                 self._print_fn("[bold red]⏹ Stopped[/bold red]")
             else:
@@ -199,7 +200,7 @@ class PlaybackController:
         if self._state == PlaybackState.IDLE:
             return False
 
-        self._stop_requested = True
+        self._stop_event.set()
 
         if self._current_proc:
             try:
@@ -249,7 +250,10 @@ def _data_dir() -> Path:
 
 
 DEFAULT_MODEL_NAME = "en_US-kristin-medium"
-DEFAULT_MODEL = _data_dir() / f"{DEFAULT_MODEL_NAME}.onnx"
+
+
+def _default_model() -> Path:
+    return _data_dir() / f"{DEFAULT_MODEL_NAME}.onnx"
 
 
 def _model_url(name: str) -> tuple[str, str]:
@@ -275,11 +279,11 @@ def _download_file(
 
 @dataclass(frozen=True)
 class ReedConfig:
-    model: Path = DEFAULT_MODEL
+    model: Path = field(default_factory=_default_model)
     speed: float = 1.0
     volume: float = 1.0
     silence: float = DEFAULT_SILENCE
-    output: Optional[Path] = None
+    output: Path | None = None
 
 
 def ensure_model(
@@ -431,7 +435,7 @@ def _parse_range_selection(
 
 
 def _iter_pdf_pages(
-    path: Path, page_selection: Optional[str]
+    path: Path, page_selection: str | None
 ) -> Iterator[tuple[int, int, str]]:
     """Yield ``(page_number, total_pages, text)`` for each selected PDF page."""
     if PdfReader is None:
@@ -590,7 +594,7 @@ def _split_paragraphs(text: str) -> list[str]:
 
 
 def _iter_epub_chapters(
-    path: Path, chapter_selection: Optional[str]
+    path: Path, chapter_selection: str | None
 ) -> Iterator[tuple[int, int, str]]:
     """Yield ``(chapter_number, total_chapters, text)`` for each selected EPUB chapter."""
     chapters = _load_epub_spine(path)
@@ -603,9 +607,13 @@ def _iter_epub_chapters(
     else:
         chapter_indices = range(total_chapters)
 
-    for index in chapter_indices:
-        text = _read_epub_chapter(chapters[index])
-        yield (index + 1, total_chapters, text)
+    try:
+        for index in chapter_indices:
+            text = _read_epub_chapter(chapters[index])
+            yield (index + 1, total_chapters, text)
+    finally:
+        if chapters:
+            chapters[0][1].close()
 
 
 def build_piper_cmd(
@@ -613,7 +621,7 @@ def build_piper_cmd(
     speed: float,
     volume: float,
     silence: float,
-    output: Optional[Path] = None,
+    output: Path | None = None,
 ) -> list[str]:
     cmd = [
         sys.executable,
@@ -669,9 +677,9 @@ def print_banner(print_fn: Callable[..., None] = console.print) -> None:
 def print_help(print_fn: Callable[..., None] = console.print) -> None:
     text = Text.from_markup("\n[bold]Available Commands:[/bold]\n")
     for cmd, desc in COMMANDS.items():
-        cmd_text = Text(cmd)
-        cmd_text.stylize("cyan")
-        text.append(f"\n{cmd_text} - {desc}")
+        text.append("\n")
+        text.append(cmd, style="cyan")
+        text.append(f" - {desc}")
     panel = Panel(text, title="Commands", border_style="cyan")
     print_fn(panel)
 
@@ -681,8 +689,8 @@ def speak_text(
     config: ReedConfig,
     run: Callable[..., CompletedProcess] = subprocess.run,
     print_fn: Callable[..., None] = console.print,
-    play_cmd: Optional[list[str]] = None,
-    controller: Optional[PlaybackController] = None,
+    play_cmd: list[str] | None = None,
+    controller: PlaybackController | None = None,
 ) -> None:
     """Speak text aloud.
 
@@ -762,9 +770,9 @@ def interactive_loop(
     prompt: str = "> ",
     quit_words: tuple[str, ...] = QUIT_WORDS,
     print_fn: Callable[..., None] = console.print,
-    prompt_fn: Optional[Callable[[], str]] = None,
+    prompt_fn: Callable[[], str] | None = None,
     clear_fn: Callable[..., None] = console.clear,
-    controller: Optional[PlaybackController] = None,
+    controller: PlaybackController | None = None,
 ) -> int:
     quit_set = {w.lower() for w in quit_words}
     help_cmd = "/help"
@@ -787,9 +795,18 @@ def interactive_loop(
             return [normalized]
         return [normalized, stripped]
 
+    def _try_detect_file_path(input_text: str) -> str | None:
+        """Try to detect if input is a file path. Returns cleaned path or None."""
+        for candidate in _path_candidates(input_text):
+            if not candidate.lower().endswith((".pdf", ".epub")):
+                continue
+            if Path(candidate).exists():
+                return candidate
+        return None
+
     def _read_file_path(file_path_str: str) -> None:
         """Load and read a PDF or EPUB file."""
-        file_path: Optional[Path] = None
+        file_path: Path | None = None
         for candidate in _path_candidates(file_path_str):
             candidate_path = Path(candidate)
             if candidate_path.exists():
@@ -875,16 +892,6 @@ def interactive_loop(
                 _read_file_path(file_path_str)
                 continue
 
-            # Check if input is a file path (drag-and-drop or pasted)
-            def _try_detect_file_path(input_text: str) -> Optional[str]:
-                """Try to detect if input is a file path. Returns cleaned path or None."""
-                for candidate in _path_candidates(input_text):
-                    if not candidate.lower().endswith((".pdf", ".epub")):
-                        continue
-                    if Path(candidate).exists():
-                        return candidate
-                return None
-
             detected_path = _try_detect_file_path(text)
             if detected_path:
                 _read_file_path(detected_path)
@@ -900,9 +907,7 @@ def interactive_loop(
         return 0
 
 
-def _should_enter_interactive(
-    args: argparse.Namespace, stdin: Optional[TextIO]
-) -> bool:
+def _should_enter_interactive(args: argparse.Namespace, stdin: TextIO | None) -> bool:
     if args.text or args.file or args.clipboard or args.pages:
         return False
     if stdin is not None and hasattr(stdin, "isatty") and stdin.isatty():
@@ -911,10 +916,10 @@ def _should_enter_interactive(
 
 
 def main(
-    argv: Optional[list[str]] = None,
+    argv: list[str] | None = None,
     run: Callable[..., CompletedProcess] = subprocess.run,
-    interactive_loop_fn: Optional[Callable[..., int]] = None,
-    stdin: Optional[TextIO] = None,
+    interactive_loop_fn: Callable[..., int] | None = None,
+    stdin: TextIO | None = None,
     print_fn: Callable[..., None] = console.print,
 ) -> int:
     if stdin is None:
@@ -971,7 +976,7 @@ def main(
 
     # Resolve model: None → default, short name → data dir path
     if args.model is None:
-        model_path = DEFAULT_MODEL
+        model_path = _default_model()
     else:
         model_path = Path(args.model)
         if not model_path.exists() and "/" not in args.model and "\\" not in args.model:
@@ -1060,8 +1065,6 @@ def main(
         return code
 
     try:
-        assert stdin is not None
-
         if args.file and Path(args.file).suffix.lower() == ".pdf":
             for page_num, total, page_text in _iter_pdf_pages(
                 Path(args.file), args.pages
@@ -1083,44 +1086,48 @@ def main(
                     )
 
             chapters = _load_epub_spine(epub_path)
-            total = len(chapters)
-            spoken: set[int] = set()
+            try:
+                total = len(chapters)
+                spoken: set[int] = set()
 
-            for ch_num, total_chapters, text in _iter_epub_chapters(
-                epub_path, args.pages
-            ):
-                if ch_num in spoken:
-                    continue
-                if text:
-                    spoken.add(ch_num)
-                    print_fn(
-                        f"\n[bold cyan]📖 Chapter {ch_num}/{total_chapters}[/bold cyan]"
-                    )
-                    _speak_chapter(text)
-                    continue
-
-                # Chapter is empty — skip to next chapter with text
-                for next_index in range(ch_num, total):
-                    next_num = next_index + 1
-                    if next_num in spoken:
+                for ch_num, total_chapters, text in _iter_epub_chapters(
+                    epub_path, args.pages
+                ):
+                    if ch_num in spoken:
                         continue
-                    next_text = _read_epub_chapter(chapters[next_index])
-                    if next_text:
-                        spoken.add(next_num)
+                    if text:
+                        spoken.add(ch_num)
                         print_fn(
-                            f"\n[yellow]⏭ Chapter {ch_num}/{total_chapters} has no text, "
-                            f"skipping to chapter {next_num}[/yellow]"
+                            f"\n[bold cyan]📖 Chapter {ch_num}/{total_chapters}[/bold cyan]"
                         )
+                        _speak_chapter(text)
+                        continue
+
+                    # Chapter is empty — skip to next chapter with text
+                    for next_index in range(ch_num, total):
+                        next_num = next_index + 1
+                        if next_num in spoken:
+                            continue
+                        next_text = _read_epub_chapter(chapters[next_index])
+                        if next_text:
+                            spoken.add(next_num)
+                            print_fn(
+                                f"\n[yellow]⏭ Chapter {ch_num}/{total_chapters} has no text, "
+                                f"skipping to chapter {next_num}[/yellow]"
+                            )
+                            print_fn(
+                                f"\n[bold cyan]📖 Chapter {next_num}/{total_chapters}[/bold cyan]"
+                            )
+                            _speak_chapter(next_text)
+                            break
+                    else:
                         print_fn(
-                            f"\n[bold cyan]📖 Chapter {next_num}/{total_chapters}[/bold cyan]"
+                            f"\n[yellow]⏭ Chapter {ch_num}/{total_chapters} has no text "
+                            f"(no subsequent chapter with text found)[/yellow]"
                         )
-                        _speak_chapter(next_text)
-                        break
-                else:
-                    print_fn(
-                        f"\n[yellow]⏭ Chapter {ch_num}/{total_chapters} has no text "
-                        f"(no subsequent chapter with text found)[/yellow]"
-                    )
+            finally:
+                if chapters:
+                    chapters[0][1].close()
             return 0
 
         text = get_text(args, stdin, run=run)
