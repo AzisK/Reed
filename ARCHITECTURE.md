@@ -159,7 +159,7 @@ EPUB file → zipfile → META-INF/container.xml → OPF spine → XHTML chapter
 
 **Thread Safety:**
 - All state mutations protected by `threading.Lock`
-- `_stop_requested` flag for clean shutdown
+- `_stop_event` (threading.Event) for clean shutdown
 - Daemon threads prevent hanging on exit
 
 **Process Management:**
