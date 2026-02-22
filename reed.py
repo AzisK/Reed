@@ -780,15 +780,23 @@ def interactive_loop(
 
     last_text = ""
 
+    def _path_candidates(path_text: str) -> list[str]:
+        stripped = path_text.strip("\"'")
+        normalized = stripped.replace("\\ ", " ")
+        if normalized == stripped:
+            return [normalized]
+        return [normalized, stripped]
+
     def _read_file_path(file_path_str: str) -> None:
         """Load and read a PDF or EPUB file."""
-        # Strip backslash escapes (common when pasting paths with spaces)
-        cleaned_path = file_path_str.replace("\\ ", " ").replace("\\", "")
-        # Strip quotes if present
-        cleaned_path = cleaned_path.strip("\"'")
+        file_path: Optional[Path] = None
+        for candidate in _path_candidates(file_path_str):
+            candidate_path = Path(candidate)
+            if candidate_path.exists():
+                file_path = candidate_path
+                break
 
-        file_path = Path(cleaned_path)
-        if not file_path.exists():
+        if file_path is None:
             print_fn(f"[bold red]File not found:[/bold red] {file_path_str}\n")
             return
 
@@ -868,22 +876,13 @@ def interactive_loop(
                 continue
 
             # Check if input is a file path (drag-and-drop or pasted)
-            # Handle paths with spaces that may have backslash escapes
             def _try_detect_file_path(input_text: str) -> Optional[str]:
                 """Try to detect if input is a file path. Returns cleaned path or None."""
-                # Strip quotes
-                stripped = input_text.strip("\"'")
-                # Remove backslash escapes (e.g., "\ " -> " ")
-                cleaned = stripped.replace("\\ ", " ").replace("\\", "")
-
-                # Check if it looks like a PDF/EPUB path
-                if cleaned.lower().endswith((".pdf", ".epub")):
-                    if Path(cleaned).exists():
-                        return cleaned
-                # Also check original stripped version
-                if stripped != cleaned and stripped.lower().endswith((".pdf", ".epub")):
-                    if Path(stripped).exists():
-                        return stripped
+                for candidate in _path_candidates(input_text):
+                    if not candidate.lower().endswith((".pdf", ".epub")):
+                        continue
+                    if Path(candidate).exists():
+                        return candidate
                 return None
 
             detected_path = _try_detect_file_path(text)
