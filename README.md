@@ -9,6 +9,8 @@ A CLI that reads text aloud using [piper-tts](https://github.com/rhasspy/piper).
 - **EPUB support** — read EPUB e-books, select chapters with `--pages`
 - **Pipe-friendly** — reads from stdin, works anywhere in a shell pipeline
 - **Interactive mode** — conversational TTS with `/replay`, `/help`, `/clear`, tab completion, history, and non-blocking playback
+- **Drag and drop** — drag PDF/EPUB files into interactive mode to read them aloud
+- **File loading** — `/load` command in interactive mode for remote terminals
 - **Adjustable speech** — control speed (`-s`), volume (`-v`), and sentence silence (`--silence`)
 - **Voice management** — download, list, and switch voices (`reed download`, `reed voices`, `-m`)
 - **Swappable voices** — use any piper-tts `.onnx` model with `-m`
@@ -160,10 +162,20 @@ When launched with no arguments, reed enters interactive mode. Type or paste tex
 
 - Type text and press Enter to hear it
 - Type `/quit` or `/exit` to stop
-- Available commands in interactive mode: `/help`, `/clear`, `/replay`
+- Available commands in interactive mode:
+  - `/help` — Show help
+  - `/clear` — Clear screen
+  - `/replay` — Replay last spoken text
+  - `/load <path>` — Load and read a PDF or EPUB file
 - Press `Ctrl-D` for EOF to exit
 
-**Note:** Interactive mode uses non-blocking playback — you can type the next line while audio is still playing.
+#### Drag and Drop
+
+You can drag and drop PDF or EPUB files directly into the interactive mode prompt. The file will be read aloud automatically. Paths with spaces are supported.
+
+**Tip:** Dragging and dropping a file is usually faster than typing `/load`. The command is mainly useful in remote terminals (SSH, tmux) or when you want to use tab completion.
+
+**Note:** Interactive mode uses non-blocking playback for typed text — you can type the next line while audio is still playing. When reading multi-page PDFs or multi-chapter EPUBs via `/load` or drag-and-drop, each page/chapter waits for the previous one to complete before starting.
 
 ### Voice Management
 
